@@ -63,3 +63,50 @@ public static class ProcessingAuthorizationExtensions
         return services;
     }
 }
+
+/// <summary>
+/// The browser origin policy the SPA is served under. The client is a separate origin from every
+/// service it calls, so each one answers its own preflight.
+/// </summary>
+/// <remarks>
+/// The MCC service shipped without this and the SPA could not sign in at all; the browser reports
+/// a failure carrying no status and no headers, which reads as an unreachable service rather than
+/// a misconfigured one (SCRUM-92). Third service, same lesson - it goes in with the first
+/// endpoint a browser will call.
+/// </remarks>
+public static class ProcessingCorsExtensions
+{
+    public const string PolicyName = "frontend";
+
+    public const string SectionName = "Cors";
+
+    public static IServiceCollection AddProcessingCors(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var origins = configuration.GetSection($"{SectionName}:AllowedOrigins").Get<string[]>() ?? [];
+
+        return services.AddCors(options => options.AddPolicy(PolicyName, policy =>
+        {
+            if (origins.Length == 0)
+            {
+                return;
+            }
+
+            policy.WithOrigins(origins).AllowAnyHeader().AllowAnyMethod();
+        }));
+    }
+
+    /// <summary>
+    /// Puts the policy in the pipeline. Before authentication: a preflight carries no
+    /// Authorization header, so it has to be answered before anything tries to authenticate it.
+    /// </summary>
+    public static IApplicationBuilder UseProcessingCors(this IApplicationBuilder app)
+    {
+        ArgumentNullException.ThrowIfNull(app);
+
+        return app.UseCors(PolicyName);
+    }
+}

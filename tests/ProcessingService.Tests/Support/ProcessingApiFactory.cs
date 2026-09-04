@@ -31,6 +31,9 @@ internal sealed class ProcessingApiFactory : WebApplicationFactory<Program>
 
     public const string Audience = "wonrich-services-tests";
 
+    /// <summary>The one browser origin the hosted service is configured to accept.</summary>
+    public const string AllowedTestOrigin = "http://localhost:5173";
+
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
 
     /// <summary>
@@ -50,6 +53,7 @@ internal sealed class ProcessingApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Auth:SigningKey", SigningKey);
         builder.UseSetting("Auth:Issuer", Issuer);
         builder.UseSetting("Auth:Audience", Audience);
+        builder.UseSetting("Cors:AllowedOrigins:0", AllowedTestOrigin);
 
         builder.ConfigureServices(services =>
         {

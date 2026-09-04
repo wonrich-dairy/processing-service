@@ -39,6 +39,7 @@ builder.Services.AddDbContext<ProcessingDbContext>(options => options.UseMySQL(c
 builder.Services.AddProcessingAuthentication(builder.Configuration);
 builder.Services.AddProcessingAuthorization();
 builder.Services.AddProcessingPolicies();
+builder.Services.AddProcessingCors(builder.Configuration);
 
 builder.Services
     .AddOptions<FactoryOptions>()
@@ -101,6 +102,9 @@ if (!app.Environment.IsProduction())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Ahead of authentication: a preflight carries no Authorization header.
+app.UseProcessingCors();
 
 app.UseAuthentication();
 app.UseAuthorization();

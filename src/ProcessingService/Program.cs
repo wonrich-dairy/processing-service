@@ -1,3 +1,7 @@
+using ProcessingService.Application.Unloads;
+using ProcessingService.Application.Tanks;
+using ProcessingService.Application.Abstractions;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.OpenApi;
@@ -34,6 +38,20 @@ builder.Services.AddDbContext<ProcessingDbContext>(options => options.UseMySQL(c
 // here independently, so processing does not call out to authenticate a request.
 builder.Services.AddProcessingAuthentication(builder.Configuration);
 builder.Services.AddProcessingAuthorization();
+builder.Services.AddProcessingPolicies();
+
+builder.Services
+    .AddOptions<FactoryOptions>()
+    .Bind(builder.Configuration.GetSection(FactoryOptions.SectionName));
+
+builder.Services.TryAddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IFactoryClock, FactoryClock>();
+builder.Services.AddScoped<ITankService, TankService>();
+builder.Services.AddScoped<IUnloadService, UnloadService>();
+
+// Domain rule violations become ProblemDetails rather than 500s.
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
 
@@ -75,6 +93,8 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+app.UseExceptionHandler();
 
 if (!app.Environment.IsProduction())
 {

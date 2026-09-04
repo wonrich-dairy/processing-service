@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using ProcessingService.Domain.Tanks;
+using ProcessingService.Domain.Unloads;
 
 namespace ProcessingService.Infrastructure.Persistence;
 
@@ -6,14 +8,28 @@ namespace ProcessingService.Infrastructure.Persistence;
 /// Entity Framework context for the Processing Service datastore (SCRUM-56).
 /// </summary>
 /// <remarks>
-/// The scaffold carries no entities yet — the processing data model is SCRUM-57. What is here is
-/// the wiring the model will need: the provider, the conventions, and a context the health check
-/// can ask whether the database is reachable.
+/// The processing data model (SCRUM-57) starts at the factory's tanks and the loads unloaded into
+/// them. References to records the MCC and Intake Service owns - dispatch notes, batches - are
+/// carried as text rather than as foreign keys: the two services own separate databases and
+/// neither may reach into the other's.
 /// </remarks>
 public class ProcessingDbContext : DbContext
 {
     public ProcessingDbContext(DbContextOptions<ProcessingDbContext> options) : base(options)
     {
+    }
+
+    /// <summary>The factory's storing and mixing tanks (SCRUM-61).</summary>
+    public DbSet<ProcessingTank> ProcessingTanks => Set<ProcessingTank>();
+
+    /// <summary>Bowser loads unloaded into storing tanks (SCRUM-62).</summary>
+    public DbSet<Unload> Unloads => Set<Unload>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(ProcessingDbContext).Assembly);
     }
 
     /// <summary>

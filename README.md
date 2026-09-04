@@ -1,10 +1,10 @@
-# Processing Service
+﻿# Processing Service
 
 Records what happens to milk after it leaves a chilling centre — mixing, pasteurisation,
 homogenisation, filling — as part of the Wonrich Dairy Quality Monitoring & Traceability System.
 
-This repository currently holds the scaffold (SCRUM-56). The processing data model is SCRUM-57 and
-the stage records are SCRUM-13 onwards.
+The processing data model (SCRUM-57) starts at the factory's tanks and the loads unloaded into
+them. The stage records are SCRUM-63 onwards.
 
 ## Tech stack
 - ASP.NET Core (.NET 10) + Entity Framework Core 10
@@ -33,6 +33,31 @@ token, so paste one into **Authorize** before trying an endpoint.
 | `dotnet build ProcessingService.slnx` | Build |
 | `dotnet test ProcessingService.slnx` | Run the suite |
 | `docker build -t wonrich/processing-service .` | Build the container |
+
+## API
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/session/me` | The caller's identity, as read off the bearer token (SCRUM-34). |
+| `GET` | `/api/processing/tanks` | The factory's tanks and what each holds. `kind` narrows to `Storing` or `Mixing` (SCRUM-61). |
+| `GET` | `/api/processing/tanks/{code}` | One tank. |
+| `POST` | `/api/processing/tanks` | Add a tank. |
+| `PUT` | `/api/processing/tanks/{code}` | Rename a tank and restate its working volume. |
+| `POST` | `/api/processing/tanks/{code}/deactivate` | Take a tank out of service. Refused while it holds milk. |
+| `POST` | `/api/processing/tanks/{code}/reactivate` | Put a tank back into service. |
+| `GET` | `/api/processing/unloads` | Unloads, newest first. `date` narrows to one factory day (SCRUM-62). |
+| `GET` | `/api/processing/unloads/{reference}` | One unload by its `UNL-YYYYMMDD-NN` reference. |
+| `POST` | `/api/processing/unloads` | Record a bowser load into a storing tank. |
+
+Records the MCC and Intake Service owns - dispatch notes, batches - are referenced by text rather
+than by foreign key: the two services own separate databases and neither may reach into the
+other's.
+
+### Who may do what
+| Policy | Roles |
+| --- | --- |
+| `ReadProcessing` | System Administrator, Production Manager, Factory Intake Officer, Quality Analyst |
+| `ManageTanks` | System Administrator, Production Manager |
+| `RecordUnloads` | System Administrator, Production Manager, Factory Intake Officer |
 
 ## Configuration
 

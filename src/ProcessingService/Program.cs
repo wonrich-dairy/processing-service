@@ -97,6 +97,24 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
+// Auto-apply pending EF migrations outside Production (SCRUM-71), so a freshly provisioned
+// database builds its own schema on first start rather than needing `dotnet ef database update`
+// run by hand against it. The intake and auth services already do this; without it, deploying
+// against an empty database leaves a service running with no tables to read.
+//
+// Guarded on the provider: the migrations are MySQL-specific, and the tests host this same
+// pipeline over a different provider, where they cannot be applied.
+if (!app.Environment.IsProduction())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<ProcessingDbContext>();
+
+    if (db.Database.ProviderName?.Contains("MySql", StringComparison.OrdinalIgnoreCase) == true)
+    {
+        db.Database.Migrate();
+    }
+}
+
 if (!app.Environment.IsProduction())
 {
     app.UseSwagger();

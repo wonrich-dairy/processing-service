@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ProcessingService.Infrastructure.Persistence;
 
@@ -10,9 +11,11 @@ using ProcessingService.Infrastructure.Persistence;
 namespace ProcessingService.Migrations
 {
     [DbContext(typeof(ProcessingDbContext))]
-    partial class ProcessingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910144959_AddProcessingRunsAndUnloadDeviation")]
+    partial class AddProcessingRunsAndUnloadDeviation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

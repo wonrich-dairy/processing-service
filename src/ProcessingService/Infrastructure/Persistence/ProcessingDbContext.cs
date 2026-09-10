@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ProcessingService.Domain.Runs;
 using ProcessingService.Domain.Tanks;
 using ProcessingService.Domain.Unloads;
 
@@ -24,6 +25,9 @@ public class ProcessingDbContext : DbContext
 
     /// <summary>Bowser loads unloaded into storing tanks (SCRUM-62).</summary>
     public DbSet<Unload> Unloads => Set<Unload>();
+
+    /// <summary>Processing runs, one per unload, carrying each load through the factory (SCRUM-57).</summary>
+    public DbSet<ProcessingRun> ProcessingRuns => Set<ProcessingRun>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

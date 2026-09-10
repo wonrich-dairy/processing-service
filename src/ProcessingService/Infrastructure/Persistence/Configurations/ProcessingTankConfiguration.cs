@@ -49,6 +49,7 @@ public sealed class UnloadConfiguration : IEntityTypeConfiguration<Unload>
 
         builder.Property(unload => unload.QuantityLitres).HasPrecision(10, 2).IsRequired();
         builder.Property(unload => unload.TemperatureCelsius).HasPrecision(5, 2).IsRequired();
+        builder.Property(unload => unload.IsTemperatureDeviation).IsRequired();
         builder.Property(unload => unload.UnloadedBy).HasMaxLength(100);
         builder.Property(unload => unload.UnloadedAtLocal).IsRequired();
         builder.Property(unload => unload.UnloadDate).IsRequired();

@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using ProcessingService.Application.Abstractions;
 using ProcessingService.Domain.Common;
+using ProcessingService.Domain.Runs;
 using ProcessingService.Domain.Tanks;
 using ProcessingService.Domain.Unloads;
 using ProcessingService.Infrastructure.Persistence;
@@ -15,6 +16,7 @@ namespace ProcessingService.Application.Unloads;
 /// <param name="StoringTankName">That tank's name.</param>
 /// <param name="QuantityLitres">Litres the factory measured.</param>
 /// <param name="TemperatureCelsius">Temperature on arrival.</param>
+/// <param name="IsTemperatureDeviation">True when the arrival temperature fell outside 1 to 3 °C.</param>
 /// <param name="UnloadedAtLocal">Wall-clock time at the factory.</param>
 /// <param name="UnloadDate">Date it is filed under.</param>
 /// <param name="UnloadedBy">Who recorded it.</param>
@@ -26,6 +28,7 @@ public sealed record UnloadView(
     string StoringTankName,
     decimal QuantityLitres,
     decimal TemperatureCelsius,
+    bool IsTemperatureDeviation,
     DateTime UnloadedAtLocal,
     DateOnly UnloadDate,
     string? UnloadedBy,
@@ -148,7 +151,13 @@ public sealed class UnloadService : IUnloadService
                 recordedAtUtc,
                 held);
 
+            // A run is born with its unload and the two are saved together, so an unload can never
+            // exist without its run and a run never without its unload. The unique index on the
+            // run's unload reference is what settles a race; this keeps the normal path to one.
+            var run = ProcessingRun.Start(Guid.NewGuid(), unload, recordedAtUtc);
+
             _dbContext.Unloads.Add(unload);
+            _dbContext.ProcessingRuns.Add(run);
 
             try
             {
@@ -159,6 +168,7 @@ public sealed class UnloadService : IUnloadService
             catch (DbUpdateException) when (attempt < MaxReferenceAttempts)
             {
                 _dbContext.Entry(unload).State = EntityState.Detached;
+                _dbContext.Entry(run).State = EntityState.Detached;
 
                 _logger.LogWarning(
                     "Reference {Reference} was taken while recording an unload against {Note}; "
@@ -202,6 +212,7 @@ public sealed class UnloadService : IUnloadService
         unload.StoringTank?.Name ?? string.Empty,
         unload.QuantityLitres,
         unload.TemperatureCelsius,
+        unload.IsTemperatureDeviation,
         unload.UnloadedAtLocal,
         unload.UnloadDate,
         unload.UnloadedBy,

@@ -25,6 +25,8 @@ public class Unload
     public const int MaxDispatchReferenceLength = 40;
     public const decimal MinTemperatureCelsius = -5m;
     public const decimal MaxTemperatureCelsius = 40m;
+    public const decimal ExpectedTemperatureMinCelsius = 1m;
+    public const decimal ExpectedTemperatureMaxCelsius = 3m;
 
     /// <summary>EF Core materialisation constructor.</summary>
     private Unload()
@@ -50,6 +52,9 @@ public class Unload
         StoringTankId = tank.Id;
         QuantityLitres = quantityLitres;
         TemperatureCelsius = temperatureCelsius;
+        IsTemperatureDeviation =
+            temperatureCelsius < ExpectedTemperatureMinCelsius
+            || temperatureCelsius > ExpectedTemperatureMaxCelsius;
         UnloadedBy = unloadedBy;
         UnloadedAtLocal = unloadedAtLocal;
         UnloadDate = DateOnly.FromDateTime(unloadedAtLocal);
@@ -73,6 +78,13 @@ public class Unload
 
     /// <summary>Temperature the load arrived at.</summary>
     public decimal TemperatureCelsius { get; private set; }
+
+    /// <summary>
+    /// True when the load arrived outside the expected 1 to 3 °C band. A deviation warns but never
+    /// blocks: the unload is still saved, and the flag is what marks it for follow-up instead of
+    /// leaving the excursion visible only in the raw temperature figure.
+    /// </summary>
+    public bool IsTemperatureDeviation { get; private set; }
 
     public string? UnloadedBy { get; private set; }
 

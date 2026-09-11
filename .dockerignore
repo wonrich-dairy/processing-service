@@ -1,9 +1,0 @@
-**/bin/
-**/obj/
-**/.vs/
-**/.vscode/
-**/node_modules/
-.git/
-.gitignore
-**/appsettings.Development.json
-**/appsettings.*.local.json

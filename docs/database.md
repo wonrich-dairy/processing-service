@@ -31,15 +31,18 @@ prerequisite of the other; they share host ports, so run one at a time.
 |---|---|---|---|
 | **Host** | `localhost` | `mcc-db.mysql.database.azure.com` | `mcc-db.mysql.database.azure.com` |
 | **Port** | `3307` (host) / `3306` (container) | `3306` | `3306` |
-| **Database** | `wonrich_processing` | `processingdb` | *not yet provisioned* |
-| **User** | `processing_user` | `processing_app` | — |
+| **Database** | `wonrich_processing` | `processingdb` | `processingdb_prod` |
+| **User** | `processing_user` | `processing_app` | `processing_app_prod` |
 | **SSL** | Not required | Required | Required |
 | **Server** | MySQL 8.0.45 (Docker) | Azure MySQL Flexible Server | Azure MySQL Flexible Server |
-| **Collation** | `utf8mb4_0900_ai_ci` | `utf8mb4_0900_ai_ci` | — |
+| **Collation** | `utf8mb4_0900_ai_ci` | `utf8mb4_0900_ai_ci` | `utf8mb4_0900_ai_ci` |
 
-> **Production is not provisioned yet.** SCRUM-71 asks for a dedicated database in both staging and
-> production; only staging exists. Creating `processingdb_prod` and its scoped account is
-> outstanding work, tracked on that ticket.
+**Staging and production hold separate accounts, not one account with rights over both.** A single
+credential spanning the two would mean a leaked staging password reaching production data;
+`processing_app` and `processing_app_prod` can each reach one database and nothing else.
+
+> Both Azure databases are empty until something deploys against them and the migrations run.
+> Wiring the App Services up to them is SCRUM-72's work, not this ticket's.
 
 ## Connection strings
 
@@ -64,11 +67,17 @@ Server=mysql;Port=3306;Database=wonrich_processing;User=processing_user;Password
 Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=processing_app;Password=<from App Service settings>;SslMode=Required
 ```
 
+### Production (Azure)
+```
+Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb_prod;User Id=processing_app_prod;Password=<from App Service settings>;SslMode=Required
+```
+
 ## Database accounts
 
-`processing_app` (Azure) and `processing_user` (local) hold privileges on the processing database
-alone. That scoping is the point of the ticket, not a formality: the auth database stores password
-hashes, and a shared account would let any compromised service read them.
+`processing_user` (local), `processing_app` (staging) and `processing_app_prod` (production) each
+hold privileges on one processing database and nothing else. That scoping is the point of the
+ticket, not a formality: the auth database stores password hashes, and a shared account would let
+any compromised service read them — which is exactly what `mcc_user` could do before this work.
 
 Verify the scoping with a negative test rather than by reading the grant table — connect as the
 service account and confirm another schema is refused:

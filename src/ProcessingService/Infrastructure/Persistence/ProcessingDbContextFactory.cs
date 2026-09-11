@@ -11,11 +11,16 @@ namespace ProcessingService.Infrastructure.Persistence;
 public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<ProcessingDbContext>
 {
     /// <summary>
-    /// Points at nothing real. Scaffolding a migration only needs a provider that can build the
-    /// model, and a committed placeholder keeps a working credential out of source control.
+    /// Matches docker-compose.yml, so `dotnet ef database update` works against the local stack
+    /// without the caller exporting a connection string first. Scaffolding a migration needs only a
+    /// provider that can build the model, so an unreachable server is fine for that; applying one
+    /// needs a real database, and this is where it is.
+    ///
+    /// These are local development credentials, identical to the compose defaults. Staging and
+    /// production supply their own through ConnectionStrings__DefaultConnection.
     /// </summary>
     private const string DesignTimeConnectionString =
-        "Server=localhost;Port=3308;Database=processing;User Id=design_time;Password=design_time";
+        "Server=localhost;Port=3307;Database=wonrich_processing;User Id=processing_user;Password=ProcessingDevPassword123!";
 
     public ProcessingDbContext CreateDbContext(string[] args)
     {

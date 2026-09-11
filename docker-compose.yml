@@ -1,0 +1,44 @@
+# The database Processing Service owns (SCRUM-71).
+#
+#   docker compose up -d
+#
+# Start this before running the service with `dotnet run`. appsettings.Development.template.json
+# points at exactly these values, so a clean checkout needs nothing edited.
+#
+# SCRUM-74 adds the service itself to this file, so that one command brings up both.
+
+name: wonrich-processing
+
+services:
+  processing-db:
+    # Pinned patch version: "mysql:8.0" floats, and a schema built on a different patch release
+    # stops being the "local matches deployed" this ticket asks for. Aligned with the Azure
+    # Flexible Server the deployed service uses.
+    image: mysql:8.0.45
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootDevPassword123!}
+      # MYSQL_DATABASE/MYSQL_USER create the schema and an account granted on that schema alone,
+      # which is the scoped credential this ticket asks for — no init script needed, because this
+      # stack holds exactly one service's database.
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-wonrich_processing}
+      MYSQL_USER: ${MYSQL_USER:-processing_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ProcessingDevPassword123!}
+    volumes:
+      - processing-db-data:/var/lib/mysql
+    healthcheck:
+      # -h 127.0.0.1 forces a TCP probe. "-h localhost" goes over the Unix socket, which can report
+      # healthy before port 3306 accepts connections.
+      # $$MYSQL_ROOT_PASSWORD is read from the container's own environment at runtime, keeping the
+      # root password out of `docker inspect`.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # Covers first-time initdb, so the retry budget is not spent waiting for it.
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  processing-db-data:

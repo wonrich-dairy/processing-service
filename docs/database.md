@@ -7,7 +7,23 @@ Processing Service owns its own MySQL database, separate from the intake and aut
 but not a schema: the service connects with an account that can reach its own database and nothing
 else, so it can evolve its schema and deploy without coordinating with the other services.
 
-Local development runs against the containerised MySQL brought up by the root `docker-compose.yml`.
+## Where the local database comes from
+
+Local development runs against a containerised MySQL. There are two ways to start one, and they
+serve the same database on the same port, so pick whichever suits what you are doing:
+
+| | Command | Brings up |
+| --- | --- | --- |
+| This repository | `docker compose up --build` | Processing Service and its MySQL (SCRUM-74) |
+| Root workspace | `docker compose up --build` in the wonrich workspace | Every service together, for a demo or cross-service work |
+| Database only | `docker compose up processing-db` | Just MySQL, for running the service with `dotnet run` |
+
+Both expose MySQL on host port **3307** with the same database name and credentials, so
+`appsettings.Development.template.json` works against either without editing. Neither is a
+prerequisite of the other; they share host ports, so run one at a time.
+
+> There is no MySQL on your machine unless one of these is running. `dotnet run` on its own will
+> fail with `Unable to connect to any of the specified MySQL hosts` — start the database first.
 
 ## Database instances
 

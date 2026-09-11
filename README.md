@@ -18,6 +18,45 @@ them. The stage records are SCRUM-63 onwards.
 - A token from the Wonrich auth service to call anything but `/health`
 
 ## Getting started
+
+### With Docker (SCRUM-74)
+
+From a clean clone, one command brings up the service and the database it owns:
+
+```bash
+docker compose up --build
+```
+
+Nothing needs copying or editing first. Every setting has a development default in
+`docker-compose.yml`, the database is created on first start, and the service applies its own
+migrations as it boots — so the schema is there without anyone running `dotnet ef`.
+
+| | |
+| --- | --- |
+| API | http://localhost:5239 |
+| Swagger UI | http://localhost:5239/swagger |
+| Health | http://localhost:5239/health |
+| MySQL (from the host) | `localhost:3307`, database `wonrich_processing`, user `processing_user` |
+
+Copy `.env.example` to `.env` only if you need to move a port something else already holds, or to
+point at different credentials.
+
+```bash
+docker compose down      # stop, keep the data
+docker compose down -v   # stop and discard the database
+```
+
+> This stack runs Processing Service on its own. The root `docker-compose.yml` in the wonrich
+> workspace brings up every service together and is what a demo runs from. They use the same host
+> ports, so run one or the other, not both.
+
+> Every route except `/health` needs a bearer token, and this stack does not include the auth
+> service. Use the root stack when you need to call a protected endpoint, or paste in a token
+> issued by an auth service using the same `Auth__SigningKey` — the defaults here match the root
+> stack's, so a token from there is accepted.
+
+### Without Docker
+
 ```powershell
 copy src\ProcessingService\appsettings.Development.template.json src\ProcessingService\appsettings.Development.json
 # then put the real connection string and signing key in that file, which is not committed
@@ -33,6 +72,8 @@ token, so paste one into **Authorize** before trying an endpoint.
 | `dotnet build ProcessingService.slnx` | Build |
 | `dotnet test ProcessingService.slnx` | Run the suite |
 | `docker build -t wonrich/processing-service .` | Build the container |
+| `docker compose up --build` | Run the service and its database together |
+| `docker compose logs -f processing` | Follow the service's logs |
 
 ## API
 | Method | Route | Purpose |

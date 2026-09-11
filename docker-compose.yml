@@ -1,0 +1,76 @@
+# Processing Service on its own, with the database it owns (SCRUM-74).
+#
+#   docker compose up --build
+#
+# This stack is for working on Processing Service alone. The root docker-compose.yml in the
+# wonrich workspace brings up all the services together and is what a demo runs from; the two use
+# the same host ports, so run one or the other rather than both.
+#
+# Nothing here needs a file to be copied or edited first: every value has a development default,
+# which is what makes "one command from a clean checkout" true. The defaults are development
+# credentials and are not used anywhere else.
+
+name: wonrich-processing
+
+services:
+  processing:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PROCESSING_HOST_PORT:-5239}:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+
+      # Port 3306 is MySQL's port inside the compose network. The host mapping below is irrelevant
+      # here — that one is for Workbench and `dotnet ef` running on the host.
+      ConnectionStrings__DefaultConnection: Server=processing-db;Port=3306;Database=${MYSQL_DATABASE:-wonrich_processing};User=${MYSQL_USER:-processing_user};Password=${MYSQL_PASSWORD:-ProcessingDevPassword123!}
+
+      # The issuer, audience and signing key must match the auth service, or a token it issues is
+      # rejected here as a bad signature. These defaults match the root stack's, so a token taken
+      # from there works against this one.
+      Auth__Issuer: ${AUTH_ISSUER:-wonrich-auth}
+      Auth__Audience: ${AUTH_AUDIENCE:-wonrich-services}
+      Auth__SigningKey: ${AUTH_SIGNING_KEY:-local-development-signing-key-not-for-any-real-environment-0123456789}
+
+      # The browser enforces CORS against the origin the client was loaded from, which is a host
+      # port rather than a compose service name.
+      Cors__AllowedOrigins__0: http://localhost:${FRONTEND_HOST_PORT:-5173}
+      Cors__AllowedOrigins__1: http://127.0.0.1:${FRONTEND_HOST_PORT:-5173}
+    depends_on:
+      processing-db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  processing-db:
+    # Pinned patch version: "mysql:8.0" floats, and a schema built on a different patch release
+    # stops being the "identical local environment" this ticket asks for. Aligned with the Azure
+    # Flexible Server the deployed service uses.
+    image: mysql:8.0.45
+    ports:
+      - "${MYSQL_HOST_PORT:-3307}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootDevPassword123!}
+      # MYSQL_DATABASE/MYSQL_USER create the schema and an account granted on that schema alone,
+      # which is the scoped credential SCRUM-71 asks for — no init script needed, because this
+      # stack holds exactly one service's database.
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-wonrich_processing}
+      MYSQL_USER: ${MYSQL_USER:-processing_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-ProcessingDevPassword123!}
+    volumes:
+      - processing-db-data:/var/lib/mysql
+    healthcheck:
+      # -h 127.0.0.1 forces a TCP probe. "-h localhost" goes over the Unix socket, which can report
+      # healthy before port 3306 accepts connections and release depends_on too early.
+      # $$MYSQL_ROOT_PASSWORD is read from the container's own environment at runtime, keeping the
+      # root password out of `docker inspect`.
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # Covers first-time initdb, so the retry budget is not spent waiting for it.
+      start_period: 40s
+    restart: unless-stopped
+
+volumes:
+  processing-db-data:

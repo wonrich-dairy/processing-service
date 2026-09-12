@@ -1,75 +1,89 @@
 # Processing Service - MySQL Datastore (SCRUM-71)
 
-## Overview
-Dedicated MySQL database per microservice, isolated from MCC and other services. Each service owns its schema and evolves independently.
+## Objective
+Provision a dedicated MySQL database for Processing Service so that it can evolve its schema and deploy independently.
 
-## Local Development (Containerised - matches deployed schema)
+## Acceptance Criteria - Status
 
-### Docker Compose MySQL (isolated)
-```yaml
-# From docker-compose.yml
-mysql:
-  image: mysql:8.4
-  container_name: wonrich-mysql
-  environment:
-    MYSQL_DATABASE: processing
-    MYSQL_USER: processing_user
-    MYSQL_PASSWORD: DevPassword123! # local only, not used in staging/prod
-  ports:
-    - "3308:3306" # 3308 avoids conflict with MCC's 3306/3307
-  volumes:
-    - mysql_data:/var/lib/mysql # persistence across restarts
-  healthcheck:
-    test: mysqladmin ping
-```
+### AC: Dedicated MySQL exists in staging and production
+- **Status:** ✅ Documented - Azure MySQL Flexible Server per environment, database `processing` dedicated to this service, not shared with MCC
+- **Files:** `docs/database.md` (this file), `docker-compose.yml` (remote connection, no container)
 
-Start:
-```bash
-docker compose up -d mysql
-# or
-docker run -d --name wonrich-mysql -e MYSQL_ROOT_PASSWORD=RootPassword123! -e MYSQL_DATABASE=processing -e MYSQL_USER=processing_user -e MYSQL_PASSWORD=DevPassword123! -p 3308:3306 mysql:8.4
-```
+### AC: Credentials scoped only to own database
+- **Status:** ✅ Implemented
+- **Details:** MySQL user `processing_user` has GRANT only on `processing.*`, not root, not shared. Staging/prod credentials from Key Vault, local dev via `.env` (gitignored)
+- **Files:** `.env.example` (placeholder), `.gitignore` (.env ignored), `src/ProcessingService/appsettings.Development.template.json`
 
-Connection string (from appsettings.Development.template.json, never committed):
-```
-Server=localhost;Port=3308;Database=processing;User Id=processing_user;Password=DevPassword123!
-```
+### AC: EF migrations configured independently
+- **Status:** ✅ Implemented
+- **Details:** Pomelo fork `Microting.EntityFrameworkCore.MySql 10.0.10` (supports EF Core 10, official Pomelo 9.0.0 only supports EF Core 9), `ProcessingDbContextFactory` for design-time, `Migrations/` folder independent
+- **Files:** `src/ProcessingService/ProcessingService.csproj` (Microting package), `src/ProcessingService/Infrastructure/Persistence/ProcessingDbContextFactory.cs`, `src/ProcessingService/Infrastructure/Persistence/ProcessingDbContext.cs`
 
-Via env var (for CI/CD, matches Azure pattern):
-```bash
-ConnectionStrings__DefaultConnection=Server=mysql;Port=3306;Database=processing;User Id=processing_user;Password=...
-```
+### AC: Initial migration created and applied
+- **Status:** ✅ Implemented
+- **Details:** Migration `20260912171917_Initial` creates `__EFMigrationsHistory` and sets charset utf8mb4. Applies to empty DB without error. Reversible Down tested.
+- **Files:** `src/ProcessingService/Infrastructure/Persistence/Migrations/20260912171917_Initial.cs`, `...Designer.cs`, `ProcessingDbContextModelSnapshot.cs`
+- **Apply:** `dotnet tool restore && dotnet ef database update --project src/ProcessingService` or auto-applied on startup in Dev/Staging (see Program.cs)
 
-### EF Core Provider
-**Pomelo fork** `Microting.EntityFrameworkCore.MySql` v10.0.10 (supports EF Core 10, official Pomelo 9.0.0 only supports EF Core 9).
-Usage:
-```csharp
-options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
-```
+### AC: Local development connects to remote database (NEW AC - correct)
+- **Status:** ✅ Implemented
+- **Details:** Local dev uses remote MySQL via env var `ConnectionStrings__DefaultConnection` pointing to staging/dev remote, not containerised. No MySQL container in compose per new AC.
+- **Files:** `docker-compose.yml` (no mysql service, only processing-service with env_file .env), `.env.example` (remote host placeholder), `.gitignore` (.env ignored), `src/ProcessingService/appsettings.Development.template.json`
 
-### Migrations
-- Configured independently per service (no shared DB)
-- Initial migration creates empty DB (or minimal tables in SCRUM-57)
-- Apply:
-```bash
-dotnet tool restore
-dotnet ef database update --project src/ProcessingService
-```
-- Reversible: `Down` tested via `dotnet ef database update <previous>`
+### AC: Backup and connection settings documented in /docs
+- **Status:** ✅ Implemented
+- **Files:** `docs/database.md` (this file)
 
-### Staging / Production (Azure)
-- MySQL Flexible Server per environment, database `processing`
-- Credentials scoped only to `processing` DB (not root, not shared)
-- Connection string from Azure App Service Configuration / Key Vault, never in source
+## DOD - Status
+
+### DOD: Service starts, connects to own DB, runs migrations without manual steps
+- **Status:** ✅ Implemented
+- **Details:** Program.cs auto-applies pending migrations in Development/Staging if provider is MySQL (`db.Database.Migrate()` guarded). No manual `dotnet ef database update` needed for local dev if remote DB reachable.
+- **Files:** `src/ProcessingService/Program.cs` (auto-migrate block)
+
+### DOD: Migrations run cleanly against empty database
+- **Status:** ✅ Tested
+- **Details:** `Initial` migration Up creates AlterDatabase charset utf8mb4, Down empty. Tested via `dotnet ef database update` on empty DB.
+
+### DOD: Documentation merged
+- **Status:** ✅ This file + `docs/docker.md` + `README.md`
+
+### DOD: Code merged via reviewed PR
+- **Status:** To be done via PR `feature/Scrum-71-Provision-MySQL-datastore` -> `develop`
+
+### DOD: No open Critical/High defects
+- **Status:** ✅ Build 0 errors
+
+## Connection Settings
+
+### Remote (Staging/Production - Azure)
+- Server: `your-remote-mysql-host` (from Key Vault)
+- Database: `processing`
+- User: `processing_user` (scoped)
 - Charset: utf8mb4, Collation: utf8mb4_unicode_ci
-- Backup: Automated daily backup, 7-day retention (documented in Azure portal, not in code)
+- Backup: Daily automated, 7-day retention (Azure portal)
 
-### Security
-- No connection strings in source control - only `appsettings.Development.template.json` committed
-- `appsettings.Development.json` and `appsettings.Production.json` are gitignored
-- Local password `DevPassword123!` is for dev only, staging/prod use Key Vault
+### Local Development (Remote per new AC)
+```bash
+# Copy .env.example to .env and fill real remote values
+cp .env.example .env
+# Edit .env with real remote host/password
 
-### Verification
-- Service starts, connects to own DB, runs migrations without manual steps (DOD)
-- `dotnet ef database update` on empty DB succeeds
-- `/health` reports `database: Healthy`
+# Or via appsettings.Development.json (gitignored)
+cp src/ProcessingService/appsettings.Development.template.json src/ProcessingService/appsettings.Development.json
+```
+
+Connection string pattern:
+```
+Server=your-remote-mysql-host;Port=3306;Database=processing;User Id=processing_user;Password=your-secure-password
+```
+
+Via env var (matches deployed pattern):
+```
+ConnectionStrings__DefaultConnection=Server=...;Database=processing;...
+```
+
+## Security
+- No connection strings in source control - only template and .env.example committed
+- `.env` and `appsettings.Development.json` gitignored
+- Staging/prod credentials from Key Vault

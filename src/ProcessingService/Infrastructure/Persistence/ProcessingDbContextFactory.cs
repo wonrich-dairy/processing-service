@@ -3,10 +3,15 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace ProcessingService.Infrastructure.Persistence;
 
+/// <summary>
+/// Design-time factory for EF migrations (SCRUM-71: migrations configured independently)
+/// Uses Pomelo MySQL provider with placeholder connection string for scaffolding, real connection from env var at runtime.
+/// No secrets in source - only placeholder.
+/// </summary>
 public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<ProcessingDbContext>
 {
     private const string DesignTimeConnectionString =
-        "Server=your-remote-mysql-host;Port=3306;Database=processing;User Id=processing_user;Password=your-secure-password";
+        "Server=your-remote-mysql-host;Port=3306;Database=processingdb;User Id=user_id;Password=your-secure-password;SslMode=Required";
 
     public ProcessingDbContext CreateDbContext(string[] args)
     {

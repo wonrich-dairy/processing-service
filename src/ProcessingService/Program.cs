@@ -84,15 +84,24 @@ var app = builder.Build();
 
 app.UseExceptionHandler();
 
-// Auto-apply pending EF migrations in Development and Staging (SCRUM-71 DOD: runs migrations without manual steps)
-// Guarded on MySQL provider: migrations are MySQL-specific, tests run on InMemory/SQLite where they cannot be applied
-if (!app.Environment.IsProduction())
+// Auto-apply pending EF migrations in Development and Staging only (SCRUM-71 DOD: runs migrations without manual steps)
+// Skipped in Production and Testing - Production uses controlled deploy, Testing uses InMemory/SQLite and has no MySQL
+// Guarded on MySQL provider: migrations are MySQL-specific
+if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<ProcessingDbContext>();
-    if (db.Database.ProviderName?.Contains("MySql", StringComparison.OrdinalIgnoreCase) == true)
+    try
     {
-        db.Database.Migrate();
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ProcessingDbContext>();
+        if (db.Database.ProviderName?.Contains("MySql", StringComparison.OrdinalIgnoreCase) == true)
+        {
+            db.Database.Migrate();
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Auto-migrate skipped - database not reachable at startup. Will be applied via dotnet ef database update or on next restart when DB is reachable.");
     }
 }
 

@@ -1,12 +1,15 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 using System.Text;
+using SRC.Authorization;
 
 namespace ProcessingService.Api.Infrastructure;
 
 /// <summary>
 /// Authentication and authorization wiring using shared Auth Service (SCRUM-56).
 /// Tokens issued by Auth Service, validated here independently (no call-out).
+/// Uses EXACT shared files from shared/Auth (WonrichRoles, WonrichClaims) to avoid role name drift.
 /// </summary>
 public static class ProcessingAuthExtensions
 {
@@ -28,7 +31,11 @@ public static class ProcessingAuthExtensions
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey)),
                     ValidateLifetime = true,
-                    ClockSkew = TimeSpan.FromMinutes(1)
+                    // Auth service sets ClockSkew = Zero (see WonrichJwtOptions.cs) - match it exactly
+                    ClockSkew = TimeSpan.Zero,
+                    // CONFIRMED by AccessTokenIssuer.cs: uses ClaimTypes.NameIdentifier, ClaimTypes.Name, ClaimTypes.Role, WonrichClaims.Facility
+                    RoleClaimType = ClaimTypes.Role,
+                    NameClaimType = ClaimTypes.NameIdentifier
                 };
             });
 
@@ -37,14 +44,28 @@ public static class ProcessingAuthExtensions
 
     public static IServiceCollection AddProcessingAuthorization(this IServiceCollection services)
     {
-        services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            // Policy for user management (same as Auth service)
+            options.AddPolicy("ManageUsers", policy =>
+                policy.RequireRole(WonrichRoles.SystemAdministrator));
+
+            // Processing-specific policies
+            options.AddPolicy("ProcessingTechnician", policy =>
+                policy.RequireRole(WonrichRoles.ProcessingTechnician, WonrichRoles.SystemAdministrator, WonrichRoles.ProductionManager));
+
+            options.AddPolicy("FactoryIntake", policy =>
+                policy.RequireRole(WonrichRoles.FactoryIntakeOfficer, WonrichRoles.ProcessingTechnician, WonrichRoles.SystemAdministrator));
+
+            options.AddPolicy("QualityAnalyst", policy =>
+                policy.RequireRole(WonrichRoles.QualityAnalyst, WonrichRoles.SystemAdministrator));
+        });
         return services;
     }
 
     public static IServiceCollection AddProcessingPolicies(this IServiceCollection services)
     {
-        // Real implementation registers WonrichRoles-based policies.
-        // For scaffold, keep empty - policies added later.
+        // Kept for backward compat, real policies now in AddProcessingAuthorization
         return services;
     }
 
@@ -71,14 +92,4 @@ public static class ProcessingAuthExtensions
     {
         return app.UseCors("ProcessingCors");
     }
-}
-
-public static class WonrichRoles
-{
-    public const string SystemAdministrator = "SystemAdministrator";
-    public const string ProductionManager = "ProductionManager";
-    public const string FactoryIntakeOfficer = "FactoryIntakeOfficer";
-    public const string QualityAnalyst = "QualityAnalyst";
-    public const string IntakeOfficer = "IntakeOfficer";
-    public const string MccManager = "MccManager";
 }

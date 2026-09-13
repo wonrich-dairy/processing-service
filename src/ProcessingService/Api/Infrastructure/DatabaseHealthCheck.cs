@@ -1,40 +1,69 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using ProcessingService.Infrastructure.Persistence;
 
 namespace ProcessingService.Api.Infrastructure;
 
 /// <summary>
-/// Reports whether the service can actually reach its database (SCRUM-56).
+/// Health check that reports DB connectivity (SCRUM-56: /health returns 200 + DB healthy).
 /// </summary>
-/// <remarks>
-/// A health check that only says the process is running answers the wrong question: the container
-/// is up long before it can serve a request that touches data. This opens a connection, so a
-/// missing password or a firewall rule shows as unhealthy rather than as failures later.
-/// </remarks>
 public sealed class DatabaseHealthCheck : IHealthCheck
 {
-    private readonly ProcessingDbContext _dbContext;
+    private readonly IServiceProvider _serviceProvider;
 
-    public DatabaseHealthCheck(ProcessingDbContext dbContext)
+    public DatabaseHealthCheck(IServiceProvider serviceProvider)
     {
-        _dbContext = dbContext;
+        _serviceProvider = serviceProvider;
     }
 
-    public async Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context,
-        CancellationToken cancellationToken = default)
+    public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
         {
-            return await _dbContext.Database.CanConnectAsync(cancellationToken)
-                ? HealthCheckResult.Healthy("The database is reachable.")
-                : HealthCheckResult.Unhealthy("The database refused the connection.");
+            using var scope = _serviceProvider.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ProcessingDbContext>();
+            var canConnect = await db.Database.CanConnectAsync(cancellationToken);
+            return canConnect
+                ? HealthCheckResult.Healthy("Database reachable")
+                : HealthCheckResult.Unhealthy("Database not reachable");
         }
-        catch (Exception exception)
+        catch (Exception ex)
         {
-            // The reason is logged and reported, but never the connection string it came from.
-            return HealthCheckResult.Unhealthy("The database could not be reached.", exception);
+            return HealthCheckResult.Unhealthy("Database check failed", ex);
         }
     }
+}
+
+public sealed class DomainExceptionHandler : Microsoft.AspNetCore.Diagnostics.IExceptionHandler
+{
+    private readonly ILogger<DomainExceptionHandler> _logger;
+
+    public DomainExceptionHandler(ILogger<DomainExceptionHandler> logger)
+    {
+        _logger = logger;
+    }
+
+    public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
+    {
+        // For scaffold, treat all exceptions as 500 except we log. Real domain exceptions handled in later sprints.
+        _logger.LogError(exception, "Unhandled exception");
+        return false;
+    }
+}
+
+public sealed class FactoryOptions
+{
+    public const string SectionName = "Factory";
+    public string TimeZoneId { get; set; } = "Asia/Colombo";
+}
+
+public interface IFactoryClock
+{
+    DateTimeOffset UtcNow { get; }
+}
+
+public sealed class FactoryClock : IFactoryClock
+{
+    private readonly TimeProvider _timeProvider;
+    public FactoryClock(TimeProvider timeProvider) => _timeProvider = timeProvider;
+    public DateTimeOffset UtcNow => _timeProvider.GetUtcNow();
 }

@@ -1,0 +1,25 @@
+# SCRUM-74 - Containerise Processing Service (NEW AC: remote MySQL, no DB container in compose)
+# Bring up Processing Service with one command: docker compose up -d
+# DB connection via env var pointing at REMOTE MySQL server (SCRUM-71), not containerised
+# Config via .env file (gitignored, .env.example committed)
+
+services:
+  processing-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wonrich-processing
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Fallback defaults if .env not present - points to remote, not local container
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ASPNETCORE_URLS: ${ASPNETCORE_URLS:-http://+:8080}
+      ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:-Server=your-remote-mysql-host;Port=3306;Database=processing;User Id=processing_user;Password=your-secure-password}
+      Auth__Issuer: ${Auth__Issuer:-wonrich-auth}
+      Auth__Audience: ${Auth__Audience:-wonrich-services}
+      Auth__SigningKey: ${Auth__SigningKey:-replace-with-the-shared-signing-key-at-least-32-characters}
+    ports:
+      - "5210:8080"
+    # No depends_on mysql - remote DB, not containerised per new AC

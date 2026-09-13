@@ -1,46 +1,40 @@
-﻿## .NET
+# Build results
 bin/
 obj/
-*.user
+out/
+publish/
+
+# User-specific files
+*.rsuser
 *.suo
+*.user
 *.userosscache
 *.sln.docstates
 
-## Build results
-[Dd]ebug/
-[Rr]elease/
-x64/
-x86/
-[Aa]rtifacts/
-
-## Visual Studio / Rider / VS Code
-.vs/
-.idea/
-.vscode/
-*.rsuser
-
-## EF Core
-*.mdf
-*.ldf
-
-## Environment / secrets
+# Secrets - never commit real dev settings (SCRUM-71 + 74)
+src/ProcessingService/appsettings.Development.json
+src/ProcessingService/appsettings.Production.json
+**/secrets.json
 .env
-*.env.local
-appsettings.Development.json
-appsettings.*.local.json
 
-## Logs
-*.log
-logs/
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
 
-## OS junk
+# OS
 .DS_Store
 Thumbs.db
 
-## Docker
-docker-compose.override.yml
+# Docker
+.docker/
 
-## Test results
-[Tt]est[Rr]esult*/
-coverage/
+# NuGet
+*.nupkg
+**/packages/
 
+# Logs
+logs/
+*.log

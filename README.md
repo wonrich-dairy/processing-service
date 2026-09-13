@@ -94,6 +94,8 @@ docker compose up -d
 - `tests/ProcessingService.Tests` - Unit + integration tests
 - `docs/database.md` - Backup and connection settings (SCRUM-71 AC)
 - `docs/docker.md` - Containerisation docs (SCRUM-74 AC)
+- `docs/environments.md` - Azure staging/production environments, URLs, config, access (SCRUM-70 AC)
+- `infra/azure/` - Scripts that create those environments; nothing in them is secret (SCRUM-70)
 - `.env.example` - Placeholder env vars committed, `.env` gitignored (SCRUM-74 AC)
 
 ## Auth (SCRUM-56 AC)
@@ -112,7 +114,7 @@ No connection strings in source control - only `appsettings.Development.template
 
 ## Environment Variables (SCRUM-74 AC: config via env vars matching deployed pattern)
 
-See `.env.example` and `src/ProcessingService/appsettings.Development.template.json` for required keys. In Azure, set via App Service Configuration / Key Vault.
+See `.env.example` and `src/ProcessingService/appsettings.Development.template.json` for required keys. In Azure they are App Service application settings, written by `infra/azure/provision.sh` and resolved at runtime — see `docs/environments.md`.
 
 - `ConnectionStrings__DefaultConnection` - Remote MySQL, env var pointing at remote server, no DB container in compose per new AC
 - `Auth__Issuer`, `Auth__Audience`, `Auth__SigningKey` - Shared with Auth Service
@@ -122,9 +124,16 @@ See `.env.example` and `src/ProcessingService/appsettings.Development.template.j
 
 `docker-compose.yml` brings up **only** Processing Service with one command, DB connection via env var pointing at remote MySQL, no database container included. Config via `.env` file.
 
+## Deployment (SCRUM-70)
+
+Staging: https://app-wonrich-processing-staging.azurewebsites.net — Production: https://app-wonrich-processing-prod.azurewebsites.net
+
+Both are provisioned from `infra/azure/` and documented in `docs/environments.md`. The CI/CD pipeline that deploys to them is SCRUM-72.
+
 ## DODs
 
 - **71 DOD:** Service starts connects own DB runs migrations without manual steps (auto-migrate in Program.cs), migrations clean on empty DB, docs merged
 - **74 DOD:** Developer confirms runs from clean clone (`cp .env.example .env` + `docker compose up -d`), docs merged
+- **70 DOD:** Staging test deployment responds on `/health`, production reachable and configured, `docs/environments.md` merged
 - **56 DOD:** Dockerfile builds from clean checkout, service registered in compose reachable from gateway, README local run + env vars, /health 200 + DB healthy, auth via shared lib, 401 for unauth except /health, Pomelo provider
 

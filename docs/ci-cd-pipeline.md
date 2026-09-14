@@ -116,18 +116,54 @@ What to know before you rely on it:
   against a newer schema. Check schema compatibility before crossing a migration boundary; EF will
   not undo one for you.
 
-## Known gap — production migrations
+## Production migrations
 
-Production runs as `ASPNETCORE_ENVIRONMENT=Production`, and `Program.cs` deliberately does not
-apply migrations there, so `processingdb_prod` stays empty until someone applies them. The health
-check uses `CanConnectAsync`, which tests connectivity and not schema — so **production can report
-`Healthy` with no tables in it**.
+Production runs as `ASPNETCORE_ENVIRONMENT=Production`, and `Program.cs` applies migrations on
+startup only in Development and Staging. That is deliberate — a production schema change should be
+something a person decides to do, not a side effect of a process restarting — but it means the
+schema does not travel with a production deployment on its own. Two things close that gap.
 
-That is fine while nothing is deployed to production, but it needs a decision before production
-carries real data: either a migration step in `deploy-production` using a connection string held
-as an environment secret, or a documented manual `dotnet ef database update` as part of a release.
-Applying migrations automatically to production is a deployment-safety question — it is not
-something this ticket should settle on its own.
+### Every build carries its schema
+
+`build-and-test` runs `dotnet ef migrations script --idempotent` and uploads the result as a
+separate `migrations` artifact, alongside the application package. `--idempotent` wraps each
+migration in a check against `__EFMigrationsHistory`, so the script is safe to run against a
+database at any point in its history, including one that is already up to date.
+
+It is generated but not applied. A GitHub-hosted runner has no route through the `mcc-db` firewall,
+and that server is in a different Azure subscription (see [environments.md](environments.md)), so
+CI cannot reach production's database even if it should. Applying it is a deliberate step by
+someone who can:
+
+```bash
+# download the `migrations` artifact from the run you are deploying, then
+mysql -h mcc-db.mysql.database.azure.com -u <admin> -p --ssl-mode=REQUIRED \
+      processingdb_prod < migrations.sql
+```
+
+Use the `mysql` client or MySQL Workbench, not an arbitrary SQL tool: the script uses `DELIMITER`,
+which is a client directive rather than SQL, and a tool that does not understand it will fail
+part-way through.
+
+### A stale schema cannot report healthy
+
+`DatabaseHealthCheck` no longer reports on connectivity alone. It asks EF for pending migrations
+and returns **Degraded** when any exist, naming them. So an environment whose database is reachable
+but does not have this build's tables says so, instead of claiming to be healthy.
+
+Both deploy jobs poll for `"status":"Healthy"` specifically, so a deployment onto an unmigrated
+database **fails the pipeline** rather than going green over a service that cannot answer a
+request.
+
+Degraded rather than Unhealthy, and still HTTP 200, is deliberate: the process is alive and the
+database is reachable, so restarting it changes nothing — a container probe should not begin a
+restart loop over something only a human can fix.
+
+### Consequence for a first production release
+
+The first deployment to production will fail its health check, because `processingdb_prod` is empty
+until the script is applied. That is the intended order: apply `migrations.sql`, then re-run the
+deployment. Rolling the pipeline green over an empty database would be the bug, not this.
 
 ## Verification checklist
 

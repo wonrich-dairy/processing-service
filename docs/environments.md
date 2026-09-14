@@ -80,18 +80,15 @@ Prerequisites: [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-c
 Windows.
 
 ```bash
-# 1. The two databases and their scoped accounts (prompts for the mcc-db admin password)
-STAGING_DB_PASSWORD='...' PROD_DB_PASSWORD='...' ./infra/azure/database-setup.sh
+# 1. The two databases and their scoped accounts.
+#    Prompts for the mcc-db admin password, then a password for each application account
+#    (Enter generates a strong one). Nothing is passed as an argument.
+./infra/azure/database-setup.sh
 
-# 2. Staging
-PROCESSING_DB_CONNECTION='Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=processing_app;Password=...;SslMode=Required' \
-AUTH_SIGNING_KEY='...' \
-CORS_ORIGIN='https://<staging frontend>' \
-./infra/azure/provision.sh staging
+# 2. Staging — prompts for the connection string and the signing key
+CORS_ORIGIN='https://<staging frontend>' ./infra/azure/provision.sh staging
 
 # 3. Production — same script, production values
-PROCESSING_DB_CONNECTION='...;Database=processingdb_prod;User Id=processing_app_prod;...' \
-AUTH_SIGNING_KEY='...' \
 ./infra/azure/provision.sh production
 
 # 4. GitHub environments + publish-profile secrets (both environments in one go)
@@ -101,12 +98,16 @@ AUTH_SIGNING_KEY='...' \
 ./infra/azure/deploy.sh staging
 ```
 
+`provision.sh` also accepts `PROCESSING_DB_CONNECTION` and `AUTH_SIGNING_KEY` from the environment
+for a scripted run. Prefer the prompt for a one-off: a secret passed on the command line is left
+behind in `~/.bash_history` and is visible in `ps` while the command runs.
+
 The scripts are idempotent. Re-run `provision.sh` to change a setting; re-run
 `github-environments.sh` after rotating a publish profile.
 
 | Script | Does |
 |---|---|
-| `database-setup.sh` | The `processingdb` / `processingdb_prod` databases and the scoped account for each. Run once, before `provision.sh`. |
+| `database-setup.sh` | The `processingdb` / `processingdb_prod` databases and the scoped account for each. Prompts for every password. Run once, before `provision.sh`. |
 | `env.sh` | Naming shared by the others — resource names, region, SKU, runtime. Nothing secret. |
 | `provision.sh <env>` | Resource group, plan, App Service, application settings, HTTPS-only, FTPS off, TLS 1.2. |
 | `github-environments.sh` | GitHub `staging` (open) and `production` (reviewer + `main` only) environments; publish profiles as environment secrets. |

@@ -14,8 +14,27 @@ set -euo pipefail
 cd "$(dirname "$0")"
 . ./env.sh "$@"
 
-: "${PROCESSING_DB_CONNECTION:?set PROCESSING_DB_CONNECTION to this environment's MySQL connection string (see docs/database.md)}"
-: "${AUTH_SIGNING_KEY:?set AUTH_SIGNING_KEY to the key the auth service signs with for this environment}"
+# Both secrets can come from the environment, for a scripted run, or be typed at the prompt. A
+# typed secret stays out of the shell history and out of `ps`, so prefer it for a one-off.
+ask_secret() {  # ask_secret <prompt> -> echoes the value
+  local prompt="$1" value
+  [ -r /dev/tty ] || { echo "no terminal to prompt on; set the variable instead" >&2; exit 1; }
+  read -rsp "$prompt" value < /dev/tty
+  echo >&2
+  printf '%s' "$value"
+}
+
+if [ -z "${PROCESSING_DB_CONNECTION:-}" ]; then
+  echo "Connection string for $ENV, e.g."
+  echo "  Server=mcc-db.mysql.database.azure.com;Port=3306;Database=$( [ "$ENV" = production ] && echo processingdb_prod || echo processingdb );User Id=$( [ "$ENV" = production ] && echo processing_app_prod || echo processing_app );Password=...;SslMode=Required"
+  PROCESSING_DB_CONNECTION=$(ask_secret "ConnectionStrings__DefaultConnection: ")
+fi
+[ -n "$PROCESSING_DB_CONNECTION" ] || { echo "a connection string is required" >&2; exit 1; }
+
+if [ -z "${AUTH_SIGNING_KEY:-}" ]; then
+  AUTH_SIGNING_KEY=$(ask_secret "Auth__SigningKey for $ENV (must match the $ENV auth service): ")
+fi
+[ -n "$AUTH_SIGNING_KEY" ] || { echo "a signing key is required" >&2; exit 1; }
 AUTH_ISSUER="${AUTH_ISSUER:-wonrich-auth}"
 AUTH_AUDIENCE="${AUTH_AUDIENCE:-wonrich-services}"
 # The frontend origin the browser will call this service from. Empty means "no browser access yet".

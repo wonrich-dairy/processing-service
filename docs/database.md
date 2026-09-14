@@ -78,9 +78,12 @@ their own database and nothing else. DDL is included because EF Core applies its
 Both are created by [`infra/azure/database-setup.sh`](../infra/azure/database-setup.sh):
 
 ```bash
-STAGING_DB_PASSWORD='...' PROD_DB_PASSWORD='...' ./infra/azure/database-setup.sh
-# prompts for the mcc-db server admin password
+./infra/azure/database-setup.sh
 ```
+
+It prompts for the `mcc-db` admin password and then for a password for each application account;
+pressing Enter generates a strong one and prints it once at the end. No password is passed as an
+argument, so none of them reach the shell history or the process list.
 
 - Backup: Azure Flexible Server automated backup, 7-day retention, restore from the portal
 - The passwords go on to `infra/azure/provision.sh`, which writes them into App Service

@@ -94,6 +94,7 @@ docker compose up -d
 - `tests/ProcessingService.Tests` - Unit + integration tests
 - `docs/database.md` - Backup and connection settings (SCRUM-71 AC)
 - `docs/docker.md` - Containerisation docs (SCRUM-74 AC)
+- `docs/kafka.md` - Kafka broker, topic naming convention, consumer groups (SCRUM-88 AC)
 - `.env.example` - Placeholder env vars committed, `.env` gitignored (SCRUM-74 AC)
 
 ## Auth (SCRUM-56 AC)
@@ -128,3 +129,33 @@ See `.env.example` and `src/ProcessingService/appsettings.Development.template.j
 - **74 DOD:** Developer confirms runs from clean clone (`cp .env.example .env` + `docker compose up -d`), docs merged
 - **56 DOD:** Dockerfile builds from clean checkout, service registered in compose reachable from gateway, README local run + env vars, /health 200 + DB healthy, auth via shared lib, 401 for unauth except /health, Pomelo provider
 
+
+## Kafka (SCRUM-88)
+
+`docker compose up -d` brings up a single-node Kafka broker alongside the service and creates the
+Wonrich topics. Nothing to install and nothing to configure first.
+
+| | |
+| --- | --- |
+| Broker, from your machine | `localhost:29092` |
+| Broker, from inside compose | `kafka:9092` |
+| Topics created by | `infra/kafka/create-topics.sh`, run as the `kafka-init` container |
+| Topic definitions | `infra/kafka/topics.env` |
+
+Topics survive a restart - the broker keeps its data in the `wonrich-kafka-data` volume.
+`docker compose down -v` is the deliberate way to discard them.
+
+```bash
+docker compose logs kafka-init        # what was created
+docker exec wonrich-kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list
+```
+
+Staging runs on the Azure Event Hubs Kafka endpoint rather than a container - same topic names,
+same client, different bootstrap address. Provision it with `./infra/azure/eventhubs.sh staging`.
+
+Naming convention, retention, consumer groups and the connection settings are in
+`docs/kafka.md`.
+
+> This ticket provisions the broker and its topics. Nothing in the service produces or consumes yet
+> - the `Kafka__*` settings are read by no code until the stories that publish stage events and
+> consume lab results land.

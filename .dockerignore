@@ -1,9 +1,12 @@
 **/bin/
 **/obj/
+**/out/
 **/.vs/
 **/.vscode/
-**/node_modules/
+**/*.user
+**/TestResults/
+**/logs/
 .git/
 .gitignore
-**/appsettings.Development.json
-**/appsettings.*.local.json
+README.md
+docker-compose.yml

@@ -4,18 +4,14 @@ using Microsoft.EntityFrameworkCore.Design;
 namespace ProcessingService.Infrastructure.Persistence;
 
 /// <summary>
-/// Used by <c>dotnet ef</c> to build a context outside the running host, so migrations can be
-/// scaffolded without a MySQL server being reachable. The connection string is only a placeholder
-/// unless one is supplied through the ConnectionStrings__DefaultConnection environment variable.
+/// Design-time factory for EF migrations (SCRUM-71: migrations configured independently)
+/// Uses Pomelo MySQL provider with placeholder connection string for scaffolding, real connection from env var at runtime.
+/// No secrets in source - only placeholder.
 /// </summary>
 public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<ProcessingDbContext>
 {
-    /// <summary>
-    /// Points at nothing real. Scaffolding a migration only needs a provider that can build the
-    /// model, and a committed placeholder keeps a working credential out of source control.
-    /// </summary>
     private const string DesignTimeConnectionString =
-        "Server=localhost;Port=3308;Database=processing;User Id=design_time;Password=design_time";
+        "Server=your-remote-mysql-host;Port=3306;Database=processingdb;User Id=user_id;Password=your-secure-password;SslMode=Required";
 
     public ProcessingDbContext CreateDbContext(string[] args)
     {
@@ -23,8 +19,10 @@ public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<Pro
             Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
             ?? DesignTimeConnectionString;
 
+        var serverVersion = new MySqlServerVersion(new Version(8, 4, 0));
+
         var options = new DbContextOptionsBuilder<ProcessingDbContext>()
-            .UseMySQL(connectionString)
+            .UseMySql(connectionString, serverVersion)
             .Options;
 
         return new ProcessingDbContext(options);

@@ -1,20 +1,23 @@
-# ── Build stage ──
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
-
-# Copy csproj and restore (layer-cached)
-COPY src/ProcessingService/ProcessingService.csproj src/ProcessingService/
-RUN dotnet restore src/ProcessingService/ProcessingService.csproj
-
-# Copy everything else and publish
-COPY src/ src/
-RUN dotnet publish src/ProcessingService/ProcessingService.csproj \
-    -c Release -o /app/publish --no-restore
-
-# ── Runtime stage ──
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+# SCRUM-56 + SCRUM-74 - Dockerfile builds and runs from clean checkout
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 8080
+EXPOSE 8081
 
-COPY --from=build /app/publish .
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG BUILD_CONFIGURATION=Release
+WORKDIR /src
+COPY ["src/ProcessingService/ProcessingService.csproj", "src/ProcessingService/"]
+RUN dotnet restore "src/ProcessingService/ProcessingService.csproj"
+COPY . .
+WORKDIR "/src/src/ProcessingService"
+RUN dotnet build "ProcessingService.csproj" -c $BUILD_CONFIGURATION -o /app/build
+
+FROM build AS publish
+ARG BUILD_CONFIGURATION=Release
+RUN dotnet publish "ProcessingService.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+
+FROM base AS final
+WORKDIR /app
+COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "ProcessingService.dll"]

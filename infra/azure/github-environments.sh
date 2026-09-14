@@ -33,8 +33,11 @@ printf '{"name":"main","type":"branch"}' \
 
 for env in staging production; do
   . ./env.sh "$env"
-  secret=AZURE_WEBAPP_PUBLISH_PROFILE_STAGING
-  [ "$env" = production ] && secret=AZURE_WEBAPP_PUBLISH_PROFILE_PROD
+  if [ "$env" = production ]; then
+    secret=AZURE_WEBAPP_PUBLISH_PROFILE_PROD
+  else
+    secret=AZURE_WEBAPP_PUBLISH_PROFILE_STAGING
+  fi
   az webapp deployment list-publishing-profiles \
     --name "$APP" --resource-group "$RESOURCE_GROUP" --xml \
     | gh secret set "$secret" --repo "$REPO" --env "$env"

@@ -18,7 +18,9 @@ SKU="${SKU:-F1}"
 RUNTIME="${RUNTIME:-DOTNETCORE:10.0}"
 
 # "production" -> "prod" for the resource names, matching rg-mcc-intake-prod.
-SHORT="$ENV"; [ "$ENV" = production ] && SHORT=prod
+# Written as if/else rather than `[ test ] && assignment`: under `set -e` that form exits the
+# whole script when the test is false, which is every staging run.
+if [ "$ENV" = production ]; then SHORT=prod; else SHORT="$ENV"; fi
 
 RESOURCE_GROUP="rg-processing-$SHORT"
 PLAN="plan-processing-$SHORT"
@@ -26,4 +28,4 @@ APP="app-wonrich-processing-$SHORT"
 APP_URL="https://$APP.azurewebsites.net"
 
 # ASPNETCORE_ENVIRONMENT drives migrations + Swagger in Program.cs: both on for Staging, off for Production.
-ASPNET_ENV=Staging; [ "$ENV" = production ] && ASPNET_ENV=Production
+if [ "$ENV" = production ]; then ASPNET_ENV=Production; else ASPNET_ENV=Staging; fi

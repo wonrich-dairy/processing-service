@@ -65,7 +65,9 @@ settings=(
   "Auth__Audience=$AUTH_AUDIENCE"
   "Auth__SigningKey=$AUTH_SIGNING_KEY"
 )
-[ -n "$CORS_ORIGIN" ] && settings+=("Cors__AllowedOrigins__0=$CORS_ORIGIN")
+if [ -n "$CORS_ORIGIN" ]; then
+  settings+=("Cors__AllowedOrigins__0=$CORS_ORIGIN")
+fi
 
 az webapp config appsettings set \
   --name "$APP" --resource-group "$RESOURCE_GROUP" \

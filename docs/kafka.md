@@ -142,15 +142,43 @@ az webapp config appsettings set --name app-wonrich-processing-staging \
 Against the local broker, using the tools already inside the container:
 
 ```bash
-docker exec -it wonrich-kafka /opt/kafka/bin/kafka-console-producer.sh \
-  --bootstrap-server localhost:9092 --topic wonrich.processing.stage-events.v1
+docker exec wonrich-kafka sh -c 'echo "{\"runId\":\"smoke\",\"stage\":\"pasteurisation\"}" \
+  | /opt/kafka/bin/kafka-console-producer.sh \
+      --bootstrap-server localhost:9092 --topic wonrich.processing.stage-events.v1'
 
-docker exec -it wonrich-kafka /opt/kafka/bin/kafka-console-consumer.sh \
-  --bootstrap-server localhost:9092 --topic wonrich.processing.stage-events.v1 --from-beginning
+docker exec wonrich-kafka sh -c '/opt/kafka/bin/kafka-console-consumer.sh \
+  --bootstrap-server localhost:9092 --topic wonrich.processing.stage-events.v1 \
+  --group processing-stage-events --from-beginning --max-messages 1 --timeout-ms 25000'
 ```
+
+> **Wrap the command in `sh -c '...'` when you are in Git Bash**, as the whole team is. MSYS
+> rewrites any argument that starts with `/` into a Windows path before Docker sees it, so
+> `docker exec wonrich-kafka /opt/kafka/bin/kafka-topics.sh` fails with
+> `stat C:/msys64/opt/kafka/...: no such file or directory`. Inside `sh -c '...'` the path is part
+> of a longer string, so it is left alone. `MSYS_NO_PATHCONV=1` works too. PowerShell, WSL and
+> macOS do not need either.
 
 Against staging, point the same tools at the Event Hubs endpoint with a client properties file
 carrying the SASL settings above.
+
+## Verified
+
+Against the compose broker on 2026-09-14:
+
+| Check | Result |
+|---|---|
+| Broker starts and reports healthy | `Up (healthy)`, Kafka 3.9.1 in KRaft mode |
+| All six topics created | partitions and retention as defined in `topics.env` |
+| Event topics | `PartitionCount: 3`, `retention.ms=604800000` |
+| Dead-letter topics | `PartitionCount: 1`, `retention.ms=2592000000` |
+| Message published and consumed | produced to `wonrich.processing.stage-events.v1`, read back by the `processing-stage-events` group |
+| Topics survive a container restart | all six present after `docker restart`, broker back in ~5s |
+| Consumer group survives a restart | `processing-stage-events` retained its committed offsets, lag 0 |
+| Topic creation is repeatable | a second `kafka-init` run exits 0 and creates nothing |
+
+Note for this project's machines: `docker compose` as a subcommand is not registered on every
+install here — the standalone `docker-compose` binary works if `docker compose` reports
+`unknown command`.
 
 ## What this ticket does not do
 

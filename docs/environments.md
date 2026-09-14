@@ -142,11 +142,23 @@ The scripts are idempotent. Re-run `provision.sh` to change a setting; re-run
 
 ```bash
 curl https://app-wonrich-processing-staging.azurewebsites.net/health
-# {"status":"Healthy","checks":{"database":{"status":"Healthy",...}}}
+# {"status":"Healthy","checks":{"database":{"status":"Healthy","description":"Database reachable"}}}
 
-curl -i https://app-wonrich-processing-staging.azurewebsites.net/api/tanks
+curl -i https://app-wonrich-processing-staging.azurewebsites.net/api/ping
 # HTTP/1.1 401 — no token, as expected
+
+curl -i https://app-wonrich-processing-staging.azurewebsites.net/api/ping/anonymous
+# HTTP/1.1 200 — the one route that does not need one
+
+curl -i http://app-wonrich-processing-staging.azurewebsites.net/health
+# HTTP/1.1 301 — https-only is on, so plain HTTP never carries a token
 ```
+
+A healthy database check is the useful one: it only passes if the connection string resolved from
+the application settings, the scoped account could open the database, and EF applied its migrations
+on startup. `__efmigrationshistory` in `processingdb` is the record of that last part — the
+migration on this branch only sets the charset, so that table being alone there is correct until
+the data model lands.
 
 Logs: `az webapp log tail --name app-wonrich-processing-staging --resource-group rg-processing-staging`.
 

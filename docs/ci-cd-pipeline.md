@@ -145,19 +145,19 @@ Use the `mysql` client or MySQL Workbench, not an arbitrary SQL tool: the script
 which is a client directive rather than SQL, and a tool that does not understand it will fail
 part-way through.
 
-### A stale schema cannot report healthy
+### A stale schema should not report healthy
 
-`DatabaseHealthCheck` no longer reports on connectivity alone. It asks EF for pending migrations
-and returns **Degraded** when any exist, naming them. So an environment whose database is reachable
-but does not have this build's tables says so, instead of claiming to be healthy.
+Both deploy jobs poll for `"status":"Healthy"` specifically rather than accepting any 200, so that
+a deployment onto a database this build cannot use fails the run instead of going green.
 
-Both deploy jobs poll for `"status":"Healthy"` specifically, so a deployment onto an unmigrated
-database **fails the pipeline** rather than going green over a service that cannot answer a
-request.
+That gate only bites if the health endpoint distinguishes the two cases. On its own,
+`DatabaseHealthCheck` reports connectivity — `CanConnectAsync` — and an empty `processingdb_prod`
+passes it. **The change that makes it report `Degraded` when migrations are pending is a separate
+pull request**, kept out of this one so the pipeline change stays additive and the health-check
+behaviour is reviewed on its own merit.
 
-Degraded rather than Unhealthy, and still HTTP 200, is deliberate: the process is alive and the
-database is reachable, so restarting it changes nothing — a container probe should not begin a
-restart loop over something only a human can fix.
+Until that lands, the health gate in this workflow proves the service is up and its database is
+reachable, but not that the schema matches.
 
 ### Consequence for a first production release
 

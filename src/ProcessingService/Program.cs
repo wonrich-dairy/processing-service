@@ -2,8 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Microsoft.OpenApi;
 using ProcessingService.Api.Infrastructure;
+using ProcessingService.Api.Infrastructure.Observability;
+using ProcessingService.Api.Infrastructure.Swagger;
 using ProcessingService.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,40 +46,14 @@ builder.Services
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IFactoryClock, FactoryClock>();
 
-// Health + ProblemDetails
+// Observability (SCRUM-90: metrics, structured logging, correlation ID)
+builder.Services.AddProcessingObservability(builder.Configuration);
+
+// Health + ProblemDetails + Swagger (SCRUM-77: own Swagger UI, auth reflected, XML comments, disabled in prod)
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
-
-// Swagger - available in Development/Staging, disabled in Production (SCRUM-77 will refine)
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Wonrich Processing Service API",
-        Version = "v1",
-        Description = "Processing stage records for Wonrich Dairy production batches."
-    });
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        Scheme = "bearer",
-        BearerFormat = "JWT",
-        In = ParameterLocation.Header,
-        Description = "Access token from POST /api/auth/login on the auth service. Paste the token only."
-    });
-    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
-    {
-        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
-    });
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml");
-    if (File.Exists(xmlPath))
-    {
-        options.IncludeXmlComments(xmlPath);
-    }
-});
+builder.Services.AddProcessingSwagger();
 
 var app = builder.Build();
 
@@ -105,11 +80,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
     }
 }
 
-if (!app.Environment.IsProduction())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseProcessingSwagger(app.Environment);
+
+app.UseProcessingObservability();
 
 app.UseProcessingCors();
 app.UseAuthentication();
@@ -130,6 +103,9 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         }));
     }
 }).AllowAnonymous();
+
+// Metrics is anonymous for Prometheus scraping (SCRUM-90)
+app.MapProcessingMetrics();
 
 app.MapControllers();
 

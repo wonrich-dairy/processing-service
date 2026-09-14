@@ -39,10 +39,16 @@ placeholder values from `appsettings.json`; nothing environment-specific is bake
 | `Auth__Issuer` | `wonrich-auth` | `wonrich-auth` |
 | `Auth__Audience` | `wonrich-services` | `wonrich-services` |
 | `Auth__SigningKey` | the key the staging auth service signs with | the key the production auth service signs with |
-| `Cors__AllowedOrigins__0` | staging frontend origin | production frontend origin |
+| `Cors__AllowedOrigins__0` | `https://frontend-phi-sage-81.vercel.app` | `https://frontend-phi-sage-81.vercel.app` |
 
 `Auth__*` must match the auth service deployed to the same environment, or every token is rejected
 as a bad signature.
+
+Both environments currently allow the same browser origin, because the team deploys one frontend
+(`https://frontend-phi-sage-81.vercel.app`) rather than one per environment. That is not real
+isolation — anyone who can open that site can be pointed at either API — and staging's value should
+change to a staging-only deployment as soon as one exists. Note the origin carries no trailing
+slash: a browser sends `Origin` without one, and the comparison is exact.
 
 > **Known gap — the signing key is not yet a secret.** `wonrich-auth-app` has no `Auth__SigningKey`
 > application setting, so it signs with the placeholder committed in the auth repository's

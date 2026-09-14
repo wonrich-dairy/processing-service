@@ -95,6 +95,7 @@ docker compose up -d
 - `docs/database.md` - Backup and connection settings (SCRUM-71 AC)
 - `docs/docker.md` - Containerisation docs (SCRUM-74 AC)
 - `docs/environments.md` - Azure staging/production environments, URLs, config, access (SCRUM-70 AC)
+- `docs/ci-cd-pipeline.md` - Build, test, deploy and rollback workflow (SCRUM-72 AC)
 - `infra/azure/` - Scripts that create those environments and their databases; nothing in them is secret (SCRUM-70)
 - `.env.example` - Placeholder env vars committed, `.env` gitignored (SCRUM-74 AC)
 
@@ -128,12 +129,13 @@ See `.env.example` and `src/ProcessingService/appsettings.Development.template.j
 
 Staging: https://app-wonrich-processing-staging.azurewebsites.net — Production: https://app-wonrich-processing-prod.azurewebsites.net
 
-Both are provisioned from `infra/azure/` and documented in `docs/environments.md`. The CI/CD pipeline that deploys to them is SCRUM-72.
+Both are provisioned from `infra/azure/` and documented in `docs/environments.md`. Deployment is automatic: a push to `develop` goes to staging, a push to `main` goes to production after manual approval - see `docs/ci-cd-pipeline.md`.
 
 ## DODs
 
 - **71 DOD:** Service starts connects own DB runs migrations without manual steps (auto-migrate in Program.cs), migrations clean on empty DB, docs merged
 - **74 DOD:** Developer confirms runs from clean clone (`cp .env.example .env` + `docker compose up -d`), docs merged
+- **72 DOD:** Pipeline green, a failing test proven to block deployment, a rollback executed, workflow documented
 - **70 DOD:** Staging test deployment responds on `/health`, production reachable and configured, `docs/environments.md` merged
 - **56 DOD:** Dockerfile builds from clean checkout, service registered in compose reachable from gateway, README local run + env vars, /health 200 + DB healthy, auth via shared lib, 401 for unauth except /health, Pomelo provider
 

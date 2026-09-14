@@ -42,8 +42,27 @@ placeholder values from `appsettings.json`; nothing environment-specific is bake
 | `Cors__AllowedOrigins__0` | staging frontend origin | production frontend origin |
 
 `Auth__*` must match the auth service deployed to the same environment, or every token is rejected
-as a bad signature. Because the two environments use different keys, a staging token is useless
-against production.
+as a bad signature.
+
+> **Known gap — the signing key is not yet a secret.** `wonrich-auth-app` has no `Auth__SigningKey`
+> application setting, so it signs with the placeholder committed in the auth repository's
+> `SRC/appsettings.json`. Processing Service is configured with that same value, because a
+> different one would reject every token the auth service issues. Anyone with read access to that
+> repository can therefore mint a valid token for any user and role, in either environment.
+>
+> Processing Service still meets its own requirement — the key is an App Service setting here, not
+> in this repository's source — and rotating the shared key is a change to the auth service, so it
+> belongs to that service's backlog. Rotation means setting a new `Auth__SigningKey` on auth,
+> intake and processing together, per environment; they are only interoperable while all three
+> agree. Staging and production should get different keys at that point, so that a staging token
+> is useless against production.
+
+## External dependencies
+
+| Dependency | Owner | Consequence |
+|---|---|---|
+| MySQL Flexible Server `mcc-db` | A different Azure subscription, outside this project's Azure for Students account | Server-level operations — firewall rules, backup policy, admin credential rotation — need whoever owns that subscription. The databases and the scoped accounts are created with the MySQL client instead (`database-setup.sh`), which needs only network access and the server admin password. |
+| JWT signing key | The auth service | See the note above. |
 
 ## Where the secrets live
 

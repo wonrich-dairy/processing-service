@@ -1,0 +1,40 @@
+# Build results
+bin/
+obj/
+out/
+publish/
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Secrets - never commit real dev settings (SCRUM-71 + 74)
+src/ProcessingService/appsettings.Development.json
+src/ProcessingService/appsettings.Production.json
+**/secrets.json
+.env
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.docker/
+
+# NuGet
+*.nupkg
+**/packages/
+
+# Logs
+logs/
+*.log

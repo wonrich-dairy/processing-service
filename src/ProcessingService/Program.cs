@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using ProcessingService.Api.Infrastructure;
 using ProcessingService.Api.Infrastructure.Observability;
 using ProcessingService.Api.Infrastructure.Swagger;
+using ProcessingService.Application.Tanks;
 using ProcessingService.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -45,6 +46,9 @@ builder.Services
 
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IFactoryClock, FactoryClock>();
+
+// Domain services (SCRUM-61: tank management)
+builder.Services.AddScoped<ITankService, TankService>();
 
 // Observability (SCRUM-90: metrics, structured logging, correlation ID)
 builder.Services.AddProcessingObservability(builder.Configuration);

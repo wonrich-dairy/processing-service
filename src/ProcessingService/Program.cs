@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ProcessingService.Api.Infrastructure;
+using ProcessingService.Api.Infrastructure.Observability;
 using ProcessingService.Api.Infrastructure.Swagger;
 using ProcessingService.Infrastructure.Persistence;
 
@@ -45,6 +46,9 @@ builder.Services
 builder.Services.TryAddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IFactoryClock, FactoryClock>();
 
+// Observability (SCRUM-90: metrics, structured logging, correlation ID)
+builder.Services.AddProcessingObservability(builder.Configuration);
+
 // Health + ProblemDetails + Swagger (SCRUM-77: own Swagger UI, auth reflected, XML comments, disabled in prod)
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
@@ -78,6 +82,8 @@ if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 
 app.UseProcessingSwagger(app.Environment);
 
+app.UseProcessingObservability();
+
 app.UseProcessingCors();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -97,6 +103,9 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
         }));
     }
 }).AllowAnonymous();
+
+// Metrics is anonymous for Prometheus scraping (SCRUM-90)
+app.MapProcessingMetrics();
 
 app.MapControllers();
 

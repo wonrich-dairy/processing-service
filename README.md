@@ -95,7 +95,7 @@ docker compose up -d
 - `docs/database.md` - Backup and connection settings (SCRUM-71 AC)
 - `docs/docker.md` - Containerisation docs (SCRUM-74 AC)
 - `docs/environments.md` - Azure staging/production environments, URLs, config, access (SCRUM-70 AC)
-- `infra/azure/` - Scripts that create those environments; nothing in them is secret (SCRUM-70)
+- `infra/azure/` - Scripts that create those environments and their databases; nothing in them is secret (SCRUM-70)
 - `.env.example` - Placeholder env vars committed, `.env` gitignored (SCRUM-74 AC)
 
 ## Auth (SCRUM-56 AC)

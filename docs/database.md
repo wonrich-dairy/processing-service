@@ -11,7 +11,7 @@ Provision a dedicated MySQL database for Processing Service so that it can evolv
 
 ### AC: Credentials scoped only to own database
 - **Status:** ✅ Implemented
-- **Details:** MySQL user `processing_user` has GRANT only on `processing.*`, not root, not shared. Staging/prod credentials from Key Vault, local dev via `.env` (gitignored)
+- **Details:** `processing_app` is granted only on `processingdb.*` and `processing_app_prod` only on `processingdb_prod.*` — not root, not shared with intake or auth. Staging and production hold separate accounts (SCRUM-70). Local dev via `.env` (gitignored)
 - **Files:** `.env.example` (placeholder), `.gitignore` (.env ignored), `src/ProcessingService/appsettings.Development.template.json`
 
 ### AC: EF migrations configured independently
@@ -57,11 +57,34 @@ Provision a dedicated MySQL database for Processing Service so that it can evolv
 ## Connection Settings
 
 ### Remote (Staging/Production - Azure)
-- Server: `your-remote-mysql-host` (from Key Vault)
-- Database: `processing`
-- User: `processing_user` (scoped)
-- Charset: utf8mb4, Collation: utf8mb4_unicode_ci
-- Backup: Daily automated, 7-day retention (Azure portal)
+
+Both environments live on the shared Azure MySQL Flexible Server `mcc-db`, but in **separate
+databases with separate accounts** (SCRUM-70). One credential spanning the two would mean a leaked
+staging password reaching production data.
+
+| | Staging | Production |
+|---|---|---|
+| Server | `mcc-db.mysql.database.azure.com` | `mcc-db.mysql.database.azure.com` |
+| Port | `3306` | `3306` |
+| Database | `processingdb` | `processingdb_prod` |
+| User | `processing_app` | `processing_app_prod` |
+| SSL | Required | Required |
+| Charset / collation | utf8mb4 / utf8mb4_0900_ai_ci | utf8mb4 / utf8mb4_0900_ai_ci |
+
+Neither account is the server admin, and neither can reach the other's database or the intake and
+auth schemas: they hold `SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, REFERENCES` on
+their own database and nothing else. DDL is included because EF Core applies its own migrations.
+
+Both are created by [`infra/azure/database-setup.sh`](../infra/azure/database-setup.sh):
+
+```bash
+STAGING_DB_PASSWORD='...' PROD_DB_PASSWORD='...' ./infra/azure/database-setup.sh
+# prompts for the mcc-db server admin password
+```
+
+- Backup: Azure Flexible Server automated backup, 7-day retention, restore from the portal
+- The passwords go on to `infra/azure/provision.sh`, which writes them into App Service
+  application settings — see [environments.md](environments.md)
 
 ### Local Development (Remote per new AC)
 ```bash
@@ -75,15 +98,15 @@ cp src/ProcessingService/appsettings.Development.template.json src/ProcessingSer
 
 Connection string pattern:
 ```
-Server=your-remote-mysql-host;Port=3306;Database=processing;User Id=processing_user;Password=your-secure-password
+Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=processing_app;Password=<staging password>;SslMode=Required
 ```
 
 Via env var (matches deployed pattern):
 ```
-ConnectionStrings__DefaultConnection=Server=...;Database=processing;...
+ConnectionStrings__DefaultConnection=Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=processing_app;Password=...;SslMode=Required
 ```
 
 ## Security
 - No connection strings in source control - only template and .env.example committed
 - `.env` and `appsettings.Development.json` gitignored
-- Staging/prod credentials from Key Vault
+- Staging and production credentials are Azure App Service application settings, written by `infra/azure/provision.sh` and read at runtime — never committed, never in a file on disk

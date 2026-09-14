@@ -80,21 +80,24 @@ Prerequisites: [Azure CLI](https://learn.microsoft.com/cli/azure/install-azure-c
 Windows.
 
 ```bash
-# 1. Staging
+# 1. The two databases and their scoped accounts (prompts for the mcc-db admin password)
+STAGING_DB_PASSWORD='...' PROD_DB_PASSWORD='...' ./infra/azure/database-setup.sh
+
+# 2. Staging
 PROCESSING_DB_CONNECTION='Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=processing_app;Password=...;SslMode=Required' \
 AUTH_SIGNING_KEY='...' \
 CORS_ORIGIN='https://<staging frontend>' \
 ./infra/azure/provision.sh staging
 
-# 2. Production — same script, production values
+# 3. Production — same script, production values
 PROCESSING_DB_CONNECTION='...;Database=processingdb_prod;User Id=processing_app_prod;...' \
 AUTH_SIGNING_KEY='...' \
 ./infra/azure/provision.sh production
 
-# 3. GitHub environments + publish-profile secrets (both environments in one go)
+# 4. GitHub environments + publish-profile secrets (both environments in one go)
 ./infra/azure/github-environments.sh
 
-# 4. Prove staging works end to end before the pipeline exists
+# 5. Prove staging works end to end before the pipeline exists
 ./infra/azure/deploy.sh staging
 ```
 
@@ -103,6 +106,7 @@ The scripts are idempotent. Re-run `provision.sh` to change a setting; re-run
 
 | Script | Does |
 |---|---|
+| `database-setup.sh` | The `processingdb` / `processingdb_prod` databases and the scoped account for each. Run once, before `provision.sh`. |
 | `env.sh` | Naming shared by the others — resource names, region, SKU, runtime. Nothing secret. |
 | `provision.sh <env>` | Resource group, plan, App Service, application settings, HTTPS-only, FTPS off, TLS 1.2. |
 | `github-environments.sh` | GitHub `staging` (open) and `production` (reviewer + `main` only) environments; publish profiles as environment secrets. |

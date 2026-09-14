@@ -1,0 +1,60 @@
+# Loki configuration (SCRUM-89).
+#
+# Single-binary mode on local filesystem storage: one container, no object store, no ring to
+# operate. Retention is enforced by the compactor, which is what keeps disk usage bounded through
+# to the final evaluation rather than filling the volume quietly.
+
+auth_enabled: false   # Single tenant. Loki is not published outside the compose network.
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn     # Loki's own logs are noisy at info and would dominate the volume.
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2024-01-01
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # 7 days, matching Prometheus. Logs and metrics covering different windows makes correlating an
+  # incident harder than it needs to be.
+  retention_period: 168h
+  # A runaway log loop should be dropped rather than allowed to fill the disk.
+  ingestion_rate_mb: 8
+  ingestion_burst_size_mb: 16
+  max_streams_per_user: 5000
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+
+compactor:
+  working_directory: /loki/compactor
+  # Without this the retention_period above is advisory: chunks stay on disk until something
+  # deletes them, and nothing does.
+  retention_enabled: true
+  delete_request_store: filesystem
+  compaction_interval: 10m
+  retention_delete_delay: 2h
+
+ruler:
+  storage:
+    type: local
+    local:
+      directory: /loki/rules

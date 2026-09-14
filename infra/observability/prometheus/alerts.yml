@@ -1,0 +1,43 @@
+# Alert rules (SCRUM-89).
+#
+# Committed rather than clicked into the Grafana UI, so they survive a container rebuild and show
+# up in review when someone changes what the team gets woken for.
+
+groups:
+  - name: wonrich-availability
+    rules:
+      # The one rule that works today regardless of what the services expose: `up` is synthesised
+      # by Prometheus itself from whether the scrape succeeded, so it needs nothing from the
+      # application. A service that stops answering is the failure worth catching first.
+      - alert: ServiceDown
+        expr: up{job=~"processing-service|intake-service|auth-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.service }} is not responding to scrapes"
+          description: >-
+            Prometheus has failed to scrape {{ $labels.service }} at {{ $labels.instance }} for two
+            minutes. Either the service is down, or it is up but no longer serving /metrics.
+
+      # Two minutes rather than instantly: an App Service on the Free tier cold-starts, and a
+      # single missed scrape during a deployment is not an incident.
+
+  - name: wonrich-errors
+    rules:
+      # Depends on the service exporting real request metrics. While /metrics returns placeholder
+      # zeros this rule can never fire - it is here so the threshold is agreed and reviewed now,
+      # not invented during an incident.
+      - alert: HighErrorRate
+        expr: >-
+          sum by (service) (rate(processing_http_request_errors_total[5m]))
+          /
+          sum by (service) (rate(processing_http_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.service }} is failing more than 5% of requests"
+          description: >-
+            Over the last five minutes more than 5% of requests to {{ $labels.service }} returned
+            an error. Check the service's logs in Loki for the same window.

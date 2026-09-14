@@ -1,0 +1,24 @@
+# Normalise line endings so a Windows clone does not produce files Linux cannot run.
+#
+# Git for Windows usually ships with core.autocrlf=true, which rewrites text files to CRLF on
+# checkout. A shell script rewritten that way has "#!/usr/bin/env bash\r" as its first line, so the
+# kernel looks for an interpreter literally called "bash\r" and the script fails to start, often
+# silently. The same applies to every config file bind-mounted into a Linux container: Prometheus,
+# Loki, Promtail and Grafana all read their configuration from files mounted off this repository.
+
+* text=auto
+
+# Always LF, whatever the developer's autocrlf says.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.dockerignore   text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.json          text eol=lf
+.env.example    text eol=lf
+
+# Windows-only files stay CRLF.
+*.ps1           text eol=crlf
+*.cmd           text eol=crlf
+*.bat           text eol=crlf

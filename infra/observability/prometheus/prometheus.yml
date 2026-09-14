@@ -1,0 +1,54 @@
+# Prometheus scrape configuration (SCRUM-89).
+#
+# Held in the repository rather than configured through a UI, so a rebuilt container comes back
+# with the same targets and rules. Retention is set on the command line in docker-compose.yml,
+# because Prometheus takes it as a flag rather than a config key.
+
+global:
+  # Fast enough that a rate() over five minutes has ~20 samples to work with, slow enough not to
+  # bother a Free-tier App Service.
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: local
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # Prometheus scrapes itself, which is how you tell "no data" apart from "nothing collected".
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: prometheus
+
+  # Processing Service on this compose network. 8080 is the container port; the published 5210 is
+  # irrelevant here, since Prometheus is inside the network.
+  - job_name: processing-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['processing-service:8080']
+        labels:
+          service: processing-service
+
+  # The other two services live in their own compose projects, on their own networks, so a service
+  # name will not resolve. host.docker.internal reaches back out to the host, where the root
+  # workspace stack publishes them. They show as down until that stack is running, which is
+  # accurate rather than hidden.
+  - job_name: intake-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:5237']
+        labels:
+          service: intake-service
+
+  - job_name: auth-service
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['host.docker.internal:5238']
+        labels:
+          service: auth-service
+
+  # Staging is scraped from the hosted stack, not from here - a container on a laptop cannot be a
+  # reliable scraper for a deployed environment. See docs/observability.md.

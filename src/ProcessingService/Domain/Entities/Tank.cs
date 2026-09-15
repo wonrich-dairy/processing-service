@@ -61,8 +61,18 @@ public class Tank
         if (string.IsNullOrWhiteSpace(letters) || string.IsNullOrWhiteSpace(numbers))
             throw new ArgumentException($"Tank code '{input}' invalid. Expected letters + numbers like ST1", nameof(input));
 
+        // Fix: only 2 letters allowed, only ST or MT per business rule ST-01, MT-02
+        if (letters.Length != 2)
+            throw new ArgumentException($"Tank code '{input}' invalid. Only 2 letters allowed. Use ST-01 or MT-02 format", nameof(input));
+
+        if (letters != "ST" && letters != "MT")
+            throw new ArgumentException($"Tank code '{input}' invalid. Only ST (Storing) or MT (Mixing) allowed", nameof(input));
+
         if (!int.TryParse(numbers, out var num))
             throw new ArgumentException($"Tank code '{input}' number part invalid", nameof(input));
+
+        if (num < 1 || num > 99)
+            throw new ArgumentException($"Tank code '{input}' number must be between 1 and 99", nameof(input));
 
         // Format number as 2 digits: 1 -> 01, 2 -> 02
         return $"{letters}-{num:D2}";

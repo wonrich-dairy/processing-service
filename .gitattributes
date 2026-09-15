@@ -1,11 +1,11 @@
 # Normalise line endings so a Windows clone does not produce files Linux cannot run.
 #
 # Git for Windows usually ships with core.autocrlf=true, which rewrites text files to CRLF on
-# checkout. A shell script rewritten that way has "#!/usr/bin/env bash\r" as its first line, so the
-# kernel looks for an interpreter literally called "bash\r" and the script fails to start, often
-# silently. The same applies to anything a Linux container executes: the Kafka topic-creation
-# script is bind-mounted into a container and run there, so it must be LF whatever the developer's
-# Git is configured to do.
+# checkout. A shell script rewritten that way has "#!/usr/bin/env bash\r" as its first line, so
+# the kernel looks for an interpreter literally called "bash\r" and the script fails to start —
+# often silently. The same applies to anything a Linux container executes: entrypoints, the
+# Dockerfile itself, and the Kafka topic-creation script that is bind-mounted into a container
+# and run there.
 
 * text=auto
 

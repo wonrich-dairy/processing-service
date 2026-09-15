@@ -1,0 +1,205 @@
+name: CI/CD — Processing Service
+
+# Processing Service builds, tests and deploys on its own, independently of the other services
+# (SCRUM-72). The environments, the App Services and the publish profiles this workflow uses were
+# created by infra/azure/ in SCRUM-70 — see docs/environments.md.
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+  # Manual redeploy, and the rollback path: pick an environment and a known-good commit.
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      commit_sha:
+        description: 'Commit SHA to deploy (blank = the branch you selected above)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+# A rollback dispatch and an ordinary push must not deploy over each other. cancel-in-progress is
+# false so the first one finishes rather than being killed halfway through a deployment.
+concurrency:
+  group: deploy-${{ github.event.inputs.target_environment || github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOLUTION: ProcessingService.slnx
+  PROJECT_PATH: src/ProcessingService/ProcessingService.csproj
+  STAGING_APP: app-wonrich-processing-staging
+  PRODUCTION_APP: app-wonrich-processing-prod
+
+jobs:
+  # ── Build and test ────────────────────────────────────────────────────────────────────────
+  # Runs for every push and every pull request, so a PR shows its build status before review.
+  # Nothing deploys unless this job succeeds, which is what makes a failing test block a release.
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha || github.ref }}
+          # Full history: the ancestry check below needs more than the tip commit.
+          fetch-depth: 0
+
+      # A production rollback may only target something that actually reached main. Without this,
+      # the dispatch form would happily deploy an arbitrary unreviewed commit to production.
+      - name: Verify rollback SHA is an ancestor of main
+        if: >-
+          github.event_name == 'workflow_dispatch' &&
+          github.event.inputs.commit_sha != '' &&
+          github.event.inputs.target_environment == 'production'
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "${{ github.event.inputs.commit_sha }}" origin/main \
+            || { echo "::error::SHA ${{ github.event.inputs.commit_sha }} is not on main"; exit 1; }
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore
+        run: dotnet restore ${{ env.SOLUTION }}
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION }} --configuration Release --no-restore
+
+      # The suite boots the app through WebApplicationFactory. It needs no database: the health
+      # check reports the connection as unhealthy and the test accepts that, so CI stays
+      # independent of mcc-db being reachable from a GitHub runner.
+      - name: Test
+        run: dotnet test ${{ env.SOLUTION }} --configuration Release --no-build --verbosity normal
+
+      - name: Publish
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: dotnet publish ${{ env.PROJECT_PATH }} --configuration Release --no-build -o ${{ github.workspace }}/publish
+
+      # Production does not migrate on startup, so the schema it needs has to travel with the
+      # build rather than live only in someone's shell history. --idempotent guards every
+      # migration with a check against __EFMigrationsHistory, so the script is safe to run against
+      # a database at any point in the history, including one that is already up to date.
+      # It is generated, not applied: a GitHub runner has no route through the mcc-db firewall,
+      # and that server belongs to another subscription. See docs/ci-cd-pipeline.md.
+      - name: Generate idempotent migration script
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          dotnet tool restore
+          dotnet ef migrations script --idempotent \
+            --project ${{ env.PROJECT_PATH }} \
+            --configuration Release --no-build \
+            --output ${{ github.workspace }}/migrations/migrations.sql
+          echo "generated $(wc -l < ${{ github.workspace }}/migrations/migrations.sql) lines"
+
+      - name: Upload build artifact
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: processing-service
+          path: ${{ github.workspace }}/publish
+
+      # A separate artifact, not part of the deployed package: the schema script has no business
+      # being served from the application's web root.
+      - name: Upload migration script
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: migrations
+          path: ${{ github.workspace }}/migrations/migrations.sql
+
+  # ── Staging ───────────────────────────────────────────────────────────────────────────────
+  # Automatic on every push to develop. No approval: staging exists to be broken in.
+  deploy-staging:
+    needs: build-and-test
+    if: |
+      (github.ref == 'refs/heads/develop' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'staging')
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://app-wonrich-processing-staging.azurewebsites.net
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: processing-service
+          path: ./publish
+
+      - name: Deploy to Azure App Service (staging)
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: app-wonrich-processing-staging
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_STAGING }}
+          package: ./publish
+
+      # A deployment that returns 200 but cannot reach its database is a failed deployment; the
+      # health endpoint reports the database separately, so check the body rather than the status.
+      - name: Verify /health reports healthy
+        run: |
+          url="https://${{ env.STAGING_APP }}.azurewebsites.net/health"
+          for attempt in $(seq 1 30); do
+            body=$(curl -fsS --max-time 20 "$url") || body=""
+            case "$body" in
+              *'"status":"Healthy"'*) echo "$body"; exit 0 ;;
+            esac
+            echo "attempt $attempt: ${body:-no response}"
+            sleep 10
+          done
+          echo "::error::$url did not report healthy"
+          exit 1
+
+  # ── Production ────────────────────────────────────────────────────────────────────────────
+  # `environment: production` is what pauses the run for manual approval: the environment created
+  # in SCRUM-70 carries a required reviewer and a main-only branch policy. The `if` below is a
+  # second line of defence, not the control itself.
+  deploy-production:
+    needs: build-and-test
+    if: |
+      (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.event.inputs.target_environment == 'production' &&
+       github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://app-wonrich-processing-prod.azurewebsites.net
+    steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: processing-service
+          path: ./publish
+
+      - name: Deploy to Azure App Service (production)
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: app-wonrich-processing-prod
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE_PROD }}
+          package: ./publish
+
+      # Production runs with ASPNETCORE_ENVIRONMENT=Production, so it does not apply migrations on
+      # startup. A healthy database here means the schema already matches what this build expects.
+      - name: Verify /health reports healthy
+        run: |
+          url="https://${{ env.PRODUCTION_APP }}.azurewebsites.net/health"
+          for attempt in $(seq 1 30); do
+            body=$(curl -fsS --max-time 20 "$url") || body=""
+            case "$body" in
+              *'"status":"Healthy"'*) echo "$body"; exit 0 ;;
+            esac
+            echo "attempt $attempt: ${body:-no response}"
+            sleep 10
+          done
+          echo "::error::$url did not report healthy"
+          exit 1

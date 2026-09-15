@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ProcessingService.Infrastructure.Persistence;
 
@@ -11,9 +12,11 @@ using ProcessingService.Infrastructure.Persistence;
 namespace ProcessingService.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ProcessingDbContext))]
-    partial class ProcessingDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260915085125_AddQualityTestStatusAndProcessingRuns")]
+    partial class AddQualityTestStatusAndProcessingRuns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,56 +24,6 @@ namespace ProcessingService.Infrastructure.Persistence.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 64);
 
             MySqlModelBuilderExtensions.AutoIncrementColumns(modelBuilder);
-
-            modelBuilder.Entity("ProcessingService.Domain.Entities.MccDispatchTrace", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(36)");
-
-                    b.Property<string>("BowserRegistration")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime?>("DispatchDate")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("DispatchedBy")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<DateTime>("LastSyncedAtUtc")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<DateTime>("RecordedAtUtc")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("Reference")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)");
-
-                    b.Property<decimal>("TotalQuantityLitres")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<decimal>("TotalUnloadedKg")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Reference")
-                        .IsUnique()
-                        .HasDatabaseName("ux_mcc_dispatch_traces_reference");
-
-                    b.ToTable("mcc_dispatch_traces", (string)null);
-                });
 
             modelBuilder.Entity("ProcessingService.Domain.Entities.ProcessingRun", b =>
                 {
@@ -139,40 +92,6 @@ namespace ProcessingService.Infrastructure.Persistence.Migrations
                     b.HasIndex("StoringTankId");
 
                     b.ToTable("processing_runs", (string)null);
-                });
-
-            modelBuilder.Entity("ProcessingService.Domain.Entities.ProcessingRunStoringAllocation", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(36)");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("datetime(6)");
-
-                    b.Property<string>("CreatedBy")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("varchar(100)");
-
-                    b.Property<Guid>("ProcessingRunId")
-                        .HasColumnType("char(36)");
-
-                    b.Property<decimal>("QuantityKg")
-                        .HasPrecision(10, 2)
-                        .HasColumnType("decimal(10,2)");
-
-                    b.Property<Guid>("StoringTankId")
-                        .HasColumnType("char(36)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("StoringTankId");
-
-                    b.HasIndex("ProcessingRunId", "StoringTankId")
-                        .HasDatabaseName("ix_storing_alloc_run_tank");
-
-                    b.ToTable("processing_run_storing_allocations", (string)null);
                 });
 
             modelBuilder.Entity("ProcessingService.Domain.Entities.ProcessingStage", b =>
@@ -555,25 +474,6 @@ namespace ProcessingService.Infrastructure.Persistence.Migrations
                     b.Navigation("StoringTank");
                 });
 
-            modelBuilder.Entity("ProcessingService.Domain.Entities.ProcessingRunStoringAllocation", b =>
-                {
-                    b.HasOne("ProcessingService.Domain.Entities.ProcessingRun", "ProcessingRun")
-                        .WithMany("StoringAllocations")
-                        .HasForeignKey("ProcessingRunId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("ProcessingService.Domain.Entities.Tank", "StoringTank")
-                        .WithMany()
-                        .HasForeignKey("StoringTankId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ProcessingRun");
-
-                    b.Navigation("StoringTank");
-                });
-
             modelBuilder.Entity("ProcessingService.Domain.Entities.ProcessingStage", b =>
                 {
                     b.HasOne("ProcessingService.Domain.Entities.Tank", "MixingTank")
@@ -638,8 +538,6 @@ namespace ProcessingService.Infrastructure.Persistence.Migrations
                     b.Navigation("QualityPanel");
 
                     b.Navigation("Stages");
-
-                    b.Navigation("StoringAllocations");
                 });
 
             modelBuilder.Entity("ProcessingService.Domain.Entities.Tank", b =>

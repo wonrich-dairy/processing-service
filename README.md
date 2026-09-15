@@ -97,6 +97,7 @@ docker compose up -d
 - `docs/environments.md` - Azure staging/production environments, URLs, config, access (SCRUM-70 AC)
 - `docs/ci-cd-pipeline.md` - Build, test, deploy and rollback workflow (SCRUM-72 AC)
 - `infra/azure/` - Scripts that create those environments and their databases; nothing in them is secret (SCRUM-70)
+- `docs/observability.md` - Prometheus, Grafana, Loki, the dashboard and alerts (SCRUM-89 AC)
 - `.env.example` - Placeholder env vars committed, `.env` gitignored (SCRUM-74 AC)
 
 ## Auth (SCRUM-56 AC)
@@ -139,3 +140,31 @@ Both are provisioned from `infra/azure/` and documented in `docs/environments.md
 - **70 DOD:** Staging test deployment responds on `/health`, production reachable and configured, `docs/environments.md` merged
 - **56 DOD:** Dockerfile builds from clean checkout, service registered in compose reachable from gateway, README local run + env vars, /health 200 + DB healthy, auth via shared lib, 401 for unauth except /health, Pomelo provider
 
+
+## Observability (SCRUM-89)
+
+`docker compose up -d` also brings up Prometheus, Loki, Promtail and Grafana. Everything is
+configured from files in `infra/observability/`, so there is nothing to import or click.
+
+| | |
+| --- | --- |
+| Grafana | http://localhost:3000 - sign in, see below |
+| Prometheus | http://localhost:9090 |
+| Dashboard | **Wonrich -> Service Overview** - request rate, error rate, response time, availability, logs |
+
+Grafana is authenticated, not open. Set a password in `.env` before first use:
+
+```bash
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<not the default>
+```
+
+Retention is bounded: Prometheus keeps 7 days or 2 GB, whichever comes first; Loki keeps 7 days.
+
+> The request-rate, error-rate and response-time panels will read **zero** until the service's
+> `/metrics` endpoint exports its real meters - it currently returns hardcoded zeros (SCRUM-90's
+> `ObservabilityExtensions.cs` says so in a comment). The availability panel and the `ServiceDown`
+> alert work regardless, since Prometheus derives those from the scrape itself. See
+> `docs/observability.md`.
+
+Full detail, including the hosted Grafana Cloud approach: `docs/observability.md`.

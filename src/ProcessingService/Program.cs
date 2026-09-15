@@ -49,6 +49,7 @@ builder.Services.AddSingleton<IFactoryClock, FactoryClock>();
 
 // Domain services (SCRUM-61: tank management)
 builder.Services.AddScoped<ITankService, TankService>();
+builder.Services.AddScoped<ITankTemperatureLogService, TankTemperatureLogService>();
 
 // MCC dispatch real - validates dispatch exists in real MCC DB mccdb.dispatch_notes (no mock, MCC finalized)
 builder.Services.AddScoped<ProcessingService.Application.MccDispatch.IMccDispatchClient, ProcessingService.Application.MccDispatch.RealMccDispatchClient>();
@@ -59,6 +60,12 @@ builder.Services.AddScoped<ProcessingService.Application.ProcessingRuns.IProcess
 // MCC dispatch trace sync - polling mccdb.dispatch_notes every 30s for true isolate (no MCC edit, only read)
 // Future upgrade: replace with Kafka consumer mcc.dispatch_created
 builder.Services.AddHostedService<ProcessingService.Application.MccDispatch.MccDispatchSyncService>();
+
+// Allocation storing->mixing with batch code [day]-[product]-[letter] per real process, no Kafka this sprint
+builder.Services.AddScoped<ProcessingService.Application.Allocations.ITankAllocationService, ProcessingService.Application.Allocations.TankAllocationService>();
+
+// Processing stages Heating -> Homogeniser -> Pasteuriser -> Cooling per SCRUM-65/66
+builder.Services.AddScoped<ProcessingService.Application.Stages.IProcessingStageService, ProcessingService.Application.Stages.ProcessingStageService>();
 
 // Quality test mock - abstraction for real quality service later (SCRUM-62/63) + real process cascade 80->75->68->COB
 // Mock now, real later via RealQualityTestClient - no change in callers

@@ -133,6 +133,16 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
 // Metrics is anonymous for Prometheus scraping (SCRUM-90)
 app.MapProcessingMetrics();
 
+// Root is anonymous and returns a small service descriptor (SCRUM-105: staging root URL returned 404)
+// JSON rather than a redirect to /swagger, because Swagger is disabled in Production
+app.MapGet("/", (IWebHostEnvironment env) => Results.Ok(new
+{
+    service = "Wonrich Processing Service",
+    environment = env.EnvironmentName,
+    health = "/health",
+    swagger = env.IsProduction() ? null : "/swagger",
+})).AllowAnonymous();
+
 app.MapControllers();
 
 app.Run();

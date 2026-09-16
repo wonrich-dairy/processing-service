@@ -49,6 +49,7 @@ builder.Services.AddSingleton<IFactoryClock, FactoryClock>();
 
 // Domain services (SCRUM-61: tank management)
 builder.Services.AddScoped<ITankService, TankService>();
+builder.Services.AddScoped<ITankTemperatureLogService, TankTemperatureLogService>();
 
 // MCC dispatch real - validates dispatch exists in real MCC DB mccdb.dispatch_notes (no mock, MCC finalized)
 builder.Services.AddScoped<ProcessingService.Application.MccDispatch.IMccDispatchClient, ProcessingService.Application.MccDispatch.RealMccDispatchClient>();
@@ -59,6 +60,12 @@ builder.Services.AddScoped<ProcessingService.Application.ProcessingRuns.IProcess
 // MCC dispatch trace sync - polling mccdb.dispatch_notes every 30s for true isolate (no MCC edit, only read)
 // Future upgrade: replace with Kafka consumer mcc.dispatch_created
 builder.Services.AddHostedService<ProcessingService.Application.MccDispatch.MccDispatchSyncService>();
+
+// Allocation storing->mixing with batch code [day]-[product]-[letter] per real process, no Kafka this sprint
+builder.Services.AddScoped<ProcessingService.Application.Allocations.ITankAllocationService, ProcessingService.Application.Allocations.TankAllocationService>();
+
+// Processing stages Heating -> Homogeniser -> Pasteuriser -> Cooling per SCRUM-65/66
+builder.Services.AddScoped<ProcessingService.Application.Stages.IProcessingStageService, ProcessingService.Application.Stages.ProcessingStageService>();
 
 // Quality test mock - abstraction for real quality service later (SCRUM-62/63) + real process cascade 80->75->68->COB
 // Mock now, real later via RealQualityTestClient - no change in callers
@@ -125,6 +132,16 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
 
 // Metrics is anonymous for Prometheus scraping (SCRUM-90)
 app.MapProcessingMetrics();
+
+// Root is anonymous and returns a small service descriptor (SCRUM-105: staging root URL returned 404)
+// JSON rather than a redirect to /swagger, because Swagger is disabled in Production
+app.MapGet("/", (IWebHostEnvironment env) => Results.Ok(new
+{
+    service = "Wonrich Processing Service",
+    environment = env.EnvironmentName,
+    health = "/health",
+    swagger = env.IsProduction() ? null : "/swagger",
+})).AllowAnonymous();
 
 app.MapControllers();
 

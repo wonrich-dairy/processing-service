@@ -56,6 +56,14 @@ if ! az webapp show --name "$APP" --resource-group "$RESOURCE_GROUP" --output no
     --runtime "$RUNTIME" --output none
 fi
 
+# The publish profile the pipeline deploys with is a basic-auth credential, and new App Services
+# ship with basic-auth publishing switched off, so without this the deploy job fails with
+# "Publish profile is invalid". SCM only; FTP stays off (ftps-state is disabled below anyway).
+az resource update \
+  --resource-group "$RESOURCE_GROUP" --namespace Microsoft.Web --parent "sites/$APP" \
+  --resource-type basicPublishingCredentialsPolicies --name scm \
+  --set properties.allow=true --output none
+
 # Config is resolved at runtime from these settings; the deployed zip carries only the
 # appsettings.json placeholders. Double-underscore is how ASP.NET Core maps env vars to sections.
 settings=(

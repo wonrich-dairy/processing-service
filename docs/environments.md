@@ -172,3 +172,8 @@ Logs: `az webapp log tail --name app-wonrich-processing-staging --resource-group
   `az webapp deployment list-publishing-profiles` after
   `az resource invoke-action --action newpassword` on the site, then re-run
   `github-environments.sh`.
+- Deploy job fails with "Publish profile is invalid for app-name and slot-name provided": the
+  App Service has basic-auth publishing switched off (Azure's default for new apps), which is
+  what a publish profile authenticates with. `provision.sh` turns it on for SCM; if the app was
+  created any other way, run
+  `az resource update -g <rg> --namespace Microsoft.Web --parent sites/<app> --resource-type basicPublishingCredentialsPolicies --name scm --set properties.allow=true`.

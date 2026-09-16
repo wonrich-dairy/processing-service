@@ -11,7 +11,7 @@ namespace ProcessingService.Api.Controllers;
 /// <summary>
 /// Mock quality test endpoints - implements REAL lab process per Problem 5:
 /// Alcohol cascade 80%->75%->68%->COB sequential, Positive=clotted=BAD, Negative=good
-/// KQ 7 colours, calculated SNF/TS/CorrectedCLR, verdict auto-derived
+/// KQ 7 colours, calculated SNF/TS from raw CLR (CLR is instrument reading, no temp correction), verdict auto-derived
 /// Returns DTOs to avoid JSON cycles.
 /// </summary>
 [ApiController]
@@ -119,8 +119,8 @@ public sealed class QualityTestsController : ControllerBase
 
     private static object ToPanelDto(QualityPanel panel)
     {
-        // Corrected CLR = raw CLR + 0.2 x (temperature - 27) per real process Step 4
-        var correctedClr = panel.RawLactometerReading + 0.2m * (panel.TemperatureCelsius - 27m);
+        // FIXED: CLR is instrument reading, no temperature correction per user
+        var clr = panel.RawLactometerReading;
 
         return new
         {
@@ -131,7 +131,8 @@ public sealed class QualityTestsController : ControllerBase
             rawLactometerReading = panel.RawLactometerReading,
             temperatureCelsius = panel.TemperatureCelsius,
             waterPercent = panel.WaterPercent,
-            correctedClr = Math.Round(correctedClr, 2),
+            clr = Math.Round(clr, 2),
+            correctedClr = Math.Round(clr, 2), // kept for backward compat, same as raw
             snf = panel.Snf,
             ts = panel.Ts,
             ph = panel.Ph,

@@ -10,8 +10,9 @@ namespace ProcessingService.Application.QualityTests;
 /// - Alcohol cascade sequential: 80% -> 75% -> 68% -> COB (COB only if all 3 failed)
 /// - Positive = clotted = BAD, Negative = not clotted = GOOD
 /// - KQ 7 colours independent
-/// - Calculated values: Corrected CLR, SNF, TS derived never manual
+/// - Calculated values: SNF, TS derived from raw CLR (CLR is instrument reading, no temperature correction per user)
 /// - Final verdict: sensory fail OR COB Positive OR physical out of range => Reject else Accept (COB Positive overrides everything)
+/// - CLR is just instrument reading, not blocking pass - lab tech decides accept/reject via selection
 /// - Partial unload: same dispatch can be split across multiple tanks, quality test status applies to ALL runs with same dispatch
 /// </summary>
 public sealed class MockQualityTestClient : IQualityTestMockClient
@@ -94,8 +95,10 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
         var cascade = ParseAndValidateCascade(request.AlcoholOutcomesJson);
         ValidateKqColour(request.KqColour);
 
-        var correctedClr = CalculateCorrectedClr(request.RawLactometerReading, request.TemperatureCelsius);
-        var snf = CalculateSnf(request.FatPercent, correctedClr);
+        // FIXED: CLR is just instrument reading, no temperature correction per user
+        // CLR should not block pass - lab tech decides via accept/reject selection
+        var clr = request.RawLactometerReading; // direct reading, no correction
+        var snf = CalculateSnf(request.FatPercent, clr);
         var ts = CalculateTs(snf, request.FatPercent);
 
         var verdictResult = DetermineVerdict(
@@ -106,7 +109,7 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
             fatPercent: request.FatPercent,
             snf: snf,
             waterPercent: request.WaterPercent,
-            correctedClr: correctedClr,
+            clr: clr,
             kqColour: request.KqColour
         );
 
@@ -255,8 +258,7 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
             throw new InvalidOperationException($"Invalid KQ colour '{kqColour}'. Must be one of 7: Blue (Excellent), Light Blue (Very Good), Purple (Good), Purple Pink (Fair), Light Pink (Poor), Pink (Very Poor), White (Fail).");
     }
 
-    private static decimal CalculateCorrectedClr(decimal rawClr, decimal temperature) => rawClr + 0.2m * (temperature - 27m);
-    private static decimal CalculateSnf(decimal fat, decimal correctedClr) => (fat * 0.22m) + (correctedClr * 0.25m) + 0.72m;
+    private static decimal CalculateSnf(decimal fat, decimal clr) => (fat * 0.22m) + (clr * 0.25m) + 0.72m;
     private static decimal CalculateTs(decimal snf, decimal fat) => snf + fat;
 
     private static string DeriveAlcoholResult(AlcoholCascade cascade)
@@ -284,7 +286,7 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
         decimal fatPercent,
         decimal snf,
         decimal waterPercent,
-        decimal correctedClr,
+        decimal clr,
         string kqColour)
     {
         if (!smellOk)
@@ -306,13 +308,13 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
             return new VerdictResult { Verdict = "Reject", FailedParameter = "FatPercent", FailedValue = $"{fatPercent} > 6.0 max" };
 
         if (snf < 8.0m)
-            return new VerdictResult { Verdict = "Reject", FailedParameter = "SNF", FailedValue = $"{snf:F2} < 8.0 min (Fat {fatPercent} + CLR {correctedClr:F2})" };
+            return new VerdictResult { Verdict = "Reject", FailedParameter = "SNF", FailedValue = $"{snf:F2} < 8.0 min (Fat {fatPercent} + CLR {clr:F2})" };
 
         if (waterPercent > 1.0m)
             return new VerdictResult { Verdict = "Reject", FailedParameter = "WaterPercent", FailedValue = $"{waterPercent} > 1.0 max" };
 
-        if (correctedClr < 26m || correctedClr > 32m)
-            return new VerdictResult { Verdict = "Reject", FailedParameter = "CorrectedCLR", FailedValue = $"{correctedClr:F2} out of 26-32 range" };
+        // FIXED: CLR is instrument reading, not blocking pass - lab tech decides accept/reject
+        // Removed auto-reject for CLR out of 26-32 range per user requirement
 
         return new VerdictResult { Verdict = "Accept" };
     }

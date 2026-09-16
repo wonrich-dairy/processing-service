@@ -22,7 +22,7 @@ public class TankAllocation
     /// <summary>Quantity allocated in KG - 2 decimal places</summary>
     public decimal QuantityKg { get; set; }
 
-    /// <summary>Product type SY,SK,FM,FLM,DK - varchar per AC 57, pre-selected from alcohol result per AC 64</summary>
+    /// <summary>Product type SY,SK,FM,FLM,DY (was DK fixed) - varchar per AC 57, pre-selected from alcohol result per AC 64</summary>
     public ProductType ProductType { get; set; }
 
     /// <summary>Day of year 1-365 - no year in code per batch code spec</summary>

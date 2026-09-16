@@ -7,9 +7,9 @@ namespace ProcessingService.Application.Allocations;
 
 /// <summary>
 /// Allocation from storing to mixing tank with batch code generation per real process:
-/// Batch code [dayNumber]-[productCode]-[batchLetter] e.g., 1-SY-A, 258-FM-A
-/// DayNumber = DayOfYear 1-365, ProductCode = SY,SK,FM,FLM,DK, BatchLetter = A-Z per product per day concurrency-safe
-/// Product line pre-selected from alcohol result: Passed 80% -> FM,FLM Fresh/Flavoured, Passed 75%/68%/COB -> SY,SK,DK Yogurt
+/// Batch code [dayNumber]-[productCode]-[batchLetter] e.g., 1-SY-A, 258-FM-A, 258-DY-A
+/// DayNumber = DayOfYear 1-365, ProductCode = SY,SK,FM,FLM,DY (was DK fixed), BatchLetter = A-Z per product per day concurrency-safe
+/// Product line pre-selected from alcohol result: Passed 80% -> FM,FLM Fresh/Flavoured, Passed 75%/68%/COB -> SY,SK,DY Yogurt
 /// No Kafka this sprint - direct DB writes, abstraction ready for next sprint
 /// </summary>
 public sealed class TankAllocationService : ITankAllocationService
@@ -242,16 +242,16 @@ public sealed class TankAllocationService : ITankAllocationService
 
         // Real cascade mapping:
         // Passed 80% -> Fresh/Flavoured best quality -> FM, FLM
-        // Passed 75%, Passed 68%, Passed COB -> Yogurt acceptable -> SY, SK, DK
+        // Passed 75%, Passed 68%, Passed COB -> Yogurt acceptable -> SY, SK, DY (was DK fixed to DY)
         // Failed COB -> cannot allocate (already blocked earlier)
 
         if (alcoholResult.Contains("80%"))
             return new[] { ProductType.FM, ProductType.FLM };
 
         if (alcoholResult.Contains("75%") || alcoholResult.Contains("68%") || alcoholResult.Contains("COB"))
-            return new[] { ProductType.SY, ProductType.SK, ProductType.DK };
+            return new[] { ProductType.SY, ProductType.SK, ProductType.DY };
 
         // If no alcohol result (old data), allow all
-        return new[] { ProductType.SY, ProductType.SK, ProductType.FM, ProductType.FLM, ProductType.DK };
+        return new[] { ProductType.SY, ProductType.SK, ProductType.FM, ProductType.FLM, ProductType.DY };
     }
 }

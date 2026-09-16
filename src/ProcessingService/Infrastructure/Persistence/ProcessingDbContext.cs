@@ -20,6 +20,7 @@ public class ProcessingDbContext : DbContext
     public DbSet<ProcessingStage> ProcessingStages => Set<ProcessingStage>();
     public DbSet<MccDispatchTrace> MccDispatchTraces => Set<MccDispatchTrace>();
     public DbSet<ProcessingRunStoringAllocation> ProcessingRunStoringAllocations => Set<ProcessingRunStoringAllocation>();
+    public DbSet<TankTemperatureLog> TankTemperatureLogs => Set<TankTemperatureLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,20 @@ public class ProcessingDbContext : DbContext
             alloc.HasOne(a => a.ProcessingRun).WithMany(r => r.StoringAllocations).HasForeignKey(a => a.ProcessingRunId).OnDelete(DeleteBehavior.Cascade);
             alloc.HasOne(a => a.StoringTank).WithMany().HasForeignKey(a => a.StoringTankId).OnDelete(DeleteBehavior.Restrict);
             alloc.HasIndex(a => new { a.ProcessingRunId, a.StoringTankId }).HasDatabaseName("ix_storing_alloc_run_tank");
+        });
+
+        // TankTemperatureLog - similar to MCC tanks, log temperature when needed with note
+        modelBuilder.Entity<TankTemperatureLog>(log =>
+        {
+            log.ToTable("tank_temperature_logs");
+            log.HasKey(l => l.Id);
+            log.Property(l => l.TemperatureC).HasPrecision(10, 2).IsRequired();
+            log.Property(l => l.Note).HasMaxLength(500);
+            log.Property(l => l.RecordedAtUtc).HasColumnType("datetime(6)").IsRequired();
+            log.Property(l => l.CreatedAtUtc).HasColumnType("datetime(6)").IsRequired();
+            log.Property(l => l.RecordedBy).HasMaxLength(100).IsRequired();
+            log.HasOne(l => l.Tank).WithMany().HasForeignKey(l => l.TankId).OnDelete(DeleteBehavior.Cascade);
+            log.HasIndex(l => new { l.TankId, l.RecordedAtUtc }).HasDatabaseName("ix_temp_logs_tank_time");
         });
 
         // Tank

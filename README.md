@@ -98,6 +98,7 @@ docker compose up -d
 - `docs/ci-cd-pipeline.md` - Build, test, deploy and rollback workflow (SCRUM-72 AC)
 - `infra/azure/` - Scripts that create those environments and their databases; nothing in them is secret (SCRUM-70)
 - `docs/kafka.md` - Kafka broker, topic naming convention, consumer groups (SCRUM-88 AC)
+- `docs/observability.md` - Prometheus, Grafana, Loki, the dashboard and alerts (SCRUM-89 AC)
 - `.env.example` - Placeholder env vars committed, `.env` gitignored (SCRUM-74 AC)
 
 ## Auth (SCRUM-56 AC)
@@ -170,3 +171,30 @@ Naming convention, retention, consumer groups and the connection settings are in
 > This ticket provisions the broker and its topics. Nothing in the service produces or consumes yet
 > - the `Kafka__*` settings are read by no code until the stories that publish stage events and
 > consume lab results land.
+## Observability (SCRUM-89)
+
+`docker compose up -d` also brings up Prometheus, Loki, Promtail and Grafana. Everything is
+configured from files in `infra/observability/`, so there is nothing to import or click.
+
+| | |
+| --- | --- |
+| Grafana | http://localhost:3000 - sign in, see below |
+| Prometheus | http://localhost:9090 |
+| Dashboard | **Wonrich -> Service Overview** - request rate, error rate, response time, availability, logs |
+
+Grafana is authenticated, not open. Set a password in `.env` before first use:
+
+```bash
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=<not the default>
+```
+
+Retention is bounded: Prometheus keeps 7 days or 2 GB, whichever comes first; Loki keeps 7 days.
+
+> The request-rate, error-rate and response-time panels will read **zero** until the service's
+> `/metrics` endpoint exports its real meters - it currently returns hardcoded zeros (SCRUM-90's
+> `ObservabilityExtensions.cs` says so in a comment). The availability panel and the `ServiceDown`
+> alert work regardless, since Prometheus derives those from the scrape itself. See
+> `docs/observability.md`.
+
+Full detail, including the hosted Grafana Cloud approach: `docs/observability.md`.

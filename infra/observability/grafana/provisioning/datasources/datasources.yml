@@ -1,0 +1,33 @@
+# Grafana data sources, provisioned from the repository (SCRUM-89).
+#
+# Adding these through the UI would mean they vanish on a container rebuild and that nobody can
+# review a change to them. Provisioned data sources are read-only in the UI, which is the point.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: wonrich-prometheus
+    jsonData:
+      # Must match Prometheus's scrape_interval, or Grafana suggests step values that return
+      # gaps on the graphs.
+      timeInterval: 15s
+    editable: false
+
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    uid: wonrich-loki
+    jsonData:
+      maxLines: 1000
+      # Lets a log line carrying a correlation ID link straight to the matching trace view.
+      derivedFields:
+        - name: CorrelationId
+          matcherRegex: '"CorrelationId":"([^"]+)"'
+          url: '$${__value.raw}'
+    editable: false

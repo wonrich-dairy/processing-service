@@ -1,0 +1,20 @@
+# Dashboard provisioning (SCRUM-89).
+#
+# Grafana loads every dashboard JSON from the mounted folder on startup, so the dashboard survives
+# a container rebuild and arrives through code review like anything else.
+
+apiVersion: 1
+
+providers:
+  - name: wonrich
+    orgId: 1
+    folder: Wonrich
+    type: file
+    # A dashboard edited in the UI is not written back to the file, so allowing deletion would let
+    # someone remove a committed dashboard with no trace in git.
+    disableDeletion: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: false
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

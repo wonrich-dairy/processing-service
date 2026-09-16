@@ -3,9 +3,10 @@
 # Git for Windows usually ships with core.autocrlf=true, which rewrites text files to CRLF on
 # checkout. A shell script rewritten that way has "#!/usr/bin/env bash\r" as its first line, so
 # the kernel looks for an interpreter literally called "bash\r" and the script fails to start —
-# often silently. The same applies to anything a Linux container executes: entrypoints, the
-# Dockerfile itself, and the Kafka topic-creation script that is bind-mounted into a container
-# and run there.
+# often silently. The same applies to anything a Linux container executes or reads: entrypoints,
+# the Dockerfile itself, the Kafka topic-creation script that is bind-mounted into a container
+# and run there, and the Prometheus, Loki, Promtail and Grafana config files bind-mounted off
+# this repository.
 
 * text=auto
 
@@ -16,6 +17,7 @@ Dockerfile      text eol=lf
 .dockerignore   text eol=lf
 *.yml           text eol=lf
 *.yaml          text eol=lf
+*.json          text eol=lf
 .env.example    text eol=lf
 topics.env      text eol=lf
 

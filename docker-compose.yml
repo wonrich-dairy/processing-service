@@ -86,5 +86,88 @@ services:
       KAFKA_BOOTSTRAP: kafka:9092
     restart: "no"
 
+  # ── Observability (SCRUM-89) ───────────────────────────────────────────────────────────────
+  # Prometheus for metrics, Loki for logs, Promtail to ship them, Grafana to look at both. Every
+  # one of them is configured from a file in infra/observability, never through a UI, so a
+  # rebuilt container comes back identical and a change to it arrives through review.
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: wonrich-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      # Retention is a flag, not a config key. Both bounds are set: whichever is hit first wins,
+      # so a sudden burst of series cannot fill the disk before the 7 days are up.
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=2GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/observability/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - wonrich-prometheus-data:/prometheus
+    extra_hosts:
+      # Lets Prometheus scrape the intake and auth services, which run in their own compose
+      # project on their own network, through the ports they publish on the host.
+      - "host.docker.internal:host-gateway"
+
+  loki:
+    image: grafana/loki:3.3.2
+    container_name: wonrich-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./infra/observability/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - wonrich-loki-data:/loki
+    # Deliberately not published: Loki has auth_enabled false, so anything that can reach it can
+    # read every log. Grafana talks to it inside the network, which is all that is needed.
+
+  promtail:
+    image: grafana/promtail:3.3.2
+    container_name: wonrich-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./infra/observability/promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      # Read-only access to the Docker socket, to discover containers and read their logs. It is
+      # still the host's Docker socket: a container that can write to it can control the daemon,
+      # which is why this is :ro and why Promtail is not published.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - wonrich-promtail-positions:/tmp
+    depends_on:
+      - loki
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: wonrich-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      # Change this in .env. The default exists so a clean clone starts, not because it is safe.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-wonrich-local-only}
+      # Authenticated, not open (SCRUM-89 AC). Anonymous access is off and sign-up is disabled,
+      # so the only way in is the admin credential above.
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_INSTALL_PLUGINS: ""
+      # Grafana phones home for version checks and news by default; neither is wanted here.
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - wonrich-grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+
 volumes:
   wonrich-kafka-data:
+  wonrich-prometheus-data:
+  wonrich-loki-data:
+  wonrich-promtail-positions:
+  wonrich-grafana-data:

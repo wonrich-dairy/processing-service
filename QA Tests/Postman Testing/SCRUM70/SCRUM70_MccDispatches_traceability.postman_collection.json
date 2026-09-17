@@ -1,0 +1,177 @@
+{
+  "info": {
+    "name": "SCRUM-70 MccDispatches FIXED",
+    "description": "FIXED: Uses /api/mcc-dispatches/validate/{dispatchNumber} and /api/mcc-dispatches/recent per Swagger",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Ping anonymous GET /api/Ping/anonymous",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping/anonymous",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "Ping",
+            "anonymous"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Validate UNKNOWN GET /api/mcc-dispatches/validate/DSP-9999-0001",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/mcc-dispatches/validate/{{dispatchNumberUnknown}}",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "mcc-dispatches",
+            "validate",
+            "{{dispatchNumberUnknown}}"
+          ]
+        },
+        "description": "Unknown 404 not recognised"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Unknown 404', function() { pm.expect(pm.response.code).to.be.oneOf([400,404]); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Validate VALID GET /api/mcc-dispatches/validate/DN-20260916-01",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/mcc-dispatches/validate/{{dispatchNumberValid}}",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "mcc-dispatches",
+            "validate",
+            "{{dispatchNumberValid}}"
+          ]
+        },
+        "description": "Valid 200"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Recent GET /api/mcc-dispatches/recent?take=10",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/mcc-dispatches/recent?take=10",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "mcc-dispatches",
+            "recent"
+          ],
+          "query": [
+            {
+              "key": "take",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "Recent MccDispatchDto"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

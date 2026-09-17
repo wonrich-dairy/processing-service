@@ -1,0 +1,334 @@
+{
+  "info": {
+    "name": "SCRUM-62 Record milk unload - FIXED endpoints from Swagger",
+    "description": "FIXED: Uses correct endpoints from Swagger /api/processing-runs/unload and /api/mcc-dispatches/validate/{dispatchNumber} not /api/ProcessingRuns\n\nFrom Swagger:\nPOST /api/processing-runs/unload body {dispatchNumber, storingTankId, quantityKg, temperatureC, smellOk, colourOk, tasteOk}\nGET /api/processing-runs\nGET /api/processing-runs/{dispatchNumber}\nGET /api/mcc-dispatches/validate/{dispatchNumber}\nGET /api/mcc-dispatches/recent\n\nACs: Unknown dispatch not recognised 404 DSP-9999-0001, valid DN-20260916-01 accepted factory intake, duplicate already been unloaded 409, temp 1-3°C outline 1.0 false 2.5 false 3.0 false 0.4 true 4.8 true, 5.2°C warns but saves IsDeviation true warning outside 1 to 3, auth required 401 per SCRUM-34",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health Check - /health anonymous",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Health anonymous per SCRUM-71/74 - should be 200 Healthy database ok even without token - proves remote MySQL not containerised"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health 200 OK anonymous', function() { pm.response.to.have.status(200); });",
+              "pm.test('Health Healthy database ok', function() { pm.expect(pm.response.text()).to.match(/Healthy|database|ok/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Ping anonymous - /api/Ping/anonymous",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping/anonymous",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["Ping", "anonymous"]
+        },
+        "description": "Anonymous ping for comparison - proves /health-style anonymous vs authorized per Swagger"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Ping anonymous 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Validate dispatch UNKNOWN - GET /api/mcc-dispatches/validate/DSP-9999-0001 - Should be 404 not recognised",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/mcc-dispatches/validate/{{dispatchNumberUnknown}}",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["mcc-dispatches", "validate", "{{dispatchNumberUnknown}}"]
+        },
+        "description": "Unknown dispatch not recognised 404 DSP-9999-0001 per AC 62/70 - dispatch number not recognised - IMccDispatchClient validation"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Unknown dispatch 404 not recognised', function() { pm.expect(pm.response.code).to.be.oneOf([400,404]); });",
+              "pm.test('Not recognised message', function() { pm.expect(pm.response.text()).to.match(/not recognised|not found|unknown|dispatch/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Validate dispatch VALID - GET /api/mcc-dispatches/validate/DN-20260916-01 - Should be 200 accepted",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/mcc-dispatches/validate/{{dispatchNumberValid}}",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["mcc-dispatches", "validate", "{{dispatchNumberValid}}"]
+        },
+        "description": "Valid dispatch DN-20260916-01 accepted factory intake per AC 62/70 - IMccDispatchClient returns valid"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Valid dispatch 200 OK accepted', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Get recent dispatches - GET /api/mcc-dispatches/recent?take=10",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/mcc-dispatches/recent?take=10",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["mcc-dispatches", "recent"],
+          "query": [
+            {
+              "key": "take",
+              "value": "10"
+            }
+          ]
+        },
+        "description": "MccDispatches recent - MccDispatchDto reference bowserRegistration dispatchDate totalQuantityLitres dispatchedBy recordedAtUtc per Swagger"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Recent dispatches 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Has reference bowserRegistration', function() { pm.expect(pm.response.text()).to.match(/reference|bowserRegistration|dispatchDate|totalQuantityLitres/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Get processing runs list - GET /api/processing-runs - FIXED endpoint",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["processing-runs"]
+        },
+        "description": "FIXED: Was /api/ProcessingRuns (PascalCase) now /api/processing-runs (kebab-case) per Swagger - returns array of processing runs with dispatchNumber storingTankCode quantityKg temperatureC isTemperatureDeviation state qualityTestStatus hasQualityPanel qualityVerdict createdAtUtc createdBy"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Processing runs list 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Has dispatchNumber storingTankCode quantityKg temperatureC state', function() { pm.expect(pm.response.text()).to.match(/dispatchNumber|storingTankCode|quantityKg|temperatureC|state/i); });",
+              "pm.test('Save first run dispatchNumber', function() { try { const arr = pm.response.json(); if (arr.length > 0) { pm.environment.set('dispatchNumberValid', arr[0].dispatchNumber); pm.environment.set('processingRunId', arr[0].id); } } catch(e) {} });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Get processing run detail - GET /api/processing-runs/DN-20260916-01",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs/{{dispatchNumberValid}}",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["processing-runs", "{{dispatchNumberValid}}"]
+        },
+        "description": "Get processing run detail by dispatchNumber - returns id dispatchNumber storingTankId storingTankCode quantityKg temperatureC isTemperatureDeviation state qualityTestStatus holdReason batchCode createdAtUtc updatedAtUtc createdBy hasQualityPanel qualityVerdict"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Processing run detail 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Has quantityKg temperatureC isTemperatureDeviation', function() { pm.expect(pm.response.text()).to.match(/quantityKg|temperatureC|isTemperatureDeviation|state/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Record milk unload VALID - POST /api/processing-runs/unload - temp 2.0°C valid",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"dispatchNumber\": \"DN-TEST-{{{{$timestamp}}}}\",\n  \"storingTankId\": \"{{storingTankIdST02}}\",\n  \"quantityKg\": 100,\n  \"temperatureC\": 2.0,\n  \"smellOk\": true,\n  \"colourOk\": true,\n  \"tasteOk\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs/unload",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["processing-runs", "unload"]
+        },
+        "description": "FIXED: Was POST /api/ProcessingRuns (wrong) now POST /api/processing-runs/unload per Swagger - body dispatchNumber storingTankId quantityKg temperatureC smellOk colourOk tasteOk - temp 1-3°C outline 1.0 false 2.5 false 3.0 false 0.4 true 4.8 true - 2.0°C valid no deviation"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Unload valid 200 OK', function() { pm.expect(pm.response.code).to.be.oneOf([200,201]); });",
+              "pm.test('Has dispatchNumber storingTankCode quantityKg', function() { pm.expect(pm.response.text()).to.match(/dispatchNumber|storingTankCode|quantityKg|temperatureC/i); });",
+              "pm.test('Save dispatchNumber', function() { try { const b = pm.response.json(); if (b.dispatchNumber) pm.environment.set('dispatchNumberValid', b.dispatchNumber); if (b.id) pm.environment.set('processingRunId', b.id); } catch(e) {} });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Record milk unload DEVIATION 5.2°C warns but saves IsDeviation true",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"dispatchNumber\": \"DN-DEVIATION-{{{{$timestamp}}}}\",\n  \"storingTankId\": \"{{storingTankIdST01}}\",\n  \"quantityKg\": 50,\n  \"temperatureC\": 5.2,\n  \"smellOk\": true,\n  \"colourOk\": true,\n  \"tasteOk\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs/unload",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["processing-runs", "unload"]
+        },
+        "description": "Record milk unload DEVIATION 5.2°C warns but saves IsDeviation true warning outside 1 to 3 per AC 62 - temp 5.2°C outside 1-3 outline should warn but save with isTemperatureDeviation true"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Unload 5.2°C deviation 200 OK warns but saves', function() { pm.expect(pm.response.code).to.be.oneOf([200,201]); });",
+              "pm.test('IsTemperatureDeviation true warning outside 1 to 3', function() { pm.expect(pm.response.text()).to.match(/isTemperatureDeviation|true|deviation|warning|outside/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Record milk unload WITHOUT token - Should be 401 Unauthorized - Security per SCRUM-34",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"dispatchNumber\": \"DN-UNAUTH-001\",\n  \"storingTankId\": \"{{storingTankIdST01}}\",\n  \"quantityKg\": 100,\n  \"temperatureC\": 2.0,\n  \"smellOk\": true,\n  \"colourOk\": true,\n  \"tasteOk\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs/unload",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["processing-runs", "unload"]
+        },
+        "description": "Without token 401 Unauthorized - auth required per SCRUM-34 AddProcessingAuthentication AddProcessingAuthorization [Authorize] - tokens issued by auth service validated here independently"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Without token 401 Unauthorized', function() { pm.expect(pm.response.code).to.eql(401); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

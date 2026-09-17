@@ -1,0 +1,232 @@
+{
+  "info": {
+    "name": "SCRUM-65 Stages FIXED /api/processing-stages",
+    "description": "FIXED per Swagger - POST /api/processing-stages/start body mixingTankId processingRunId stageType Heating\nPOST /api/processing-stages/{id}/end body endTemperatureC cultureAdded\nGET /api/processing-stages/mixing-tank/{mixingTankId}\nGET /api/processing-stages/active\nGET /api/processing-stages/active-batches\n\nACs: Heating 09:10-09:48 58.0 no deviation 40-65 outline pasteuriser 80-85 outline out-of-range warns IsDeviation true duration 31",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Get active stages GET /api/processing-stages/active FIXED",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-stages/active",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-stages",
+            "active"
+          ]
+        },
+        "description": "FIXED was /api/ProcessingStages"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Get active batches GET /api/processing-stages/active-batches",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-stages/active-batches",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-stages",
+            "active-batches"
+          ]
+        },
+        "description": "Active batches"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Get stages by mixing tank GET /api/processing-stages/mixing-tank/{mixingTankId}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-stages/mixing-tank/{{mixingTankIdMT03}}",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-stages",
+            "mixing-tank",
+            "{{mixingTankIdMT03}}"
+          ]
+        },
+        "description": "Stages by mixing tank"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Start Heating POST /api/processing-stages/start",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-stages/start",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-stages",
+            "start"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"mixingTankId\": \"{{mixingTankIdMT03}}\",\n  \"processingRunId\": \"{{processingRunId}}\",\n  \"stageType\": \"Heating\"\n}"
+        },
+        "description": "Start Heating stageType Heating"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Start Heating 200', function() { pm.expect(pm.response.code).to.be.oneOf([200,201]); });",
+              "pm.test('Save stageId', function() { try { const b=pm.response.json(); if(b.id) pm.environment.set('stageId', b.id); } catch(e){} });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - End Heating 58.0 POST /api/processing-stages/{id}/end",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-stages/{{stageId}}/end",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-stages",
+            "{{stageId}}",
+            "end"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"endTemperatureC\": 58.0,\n  \"cultureAdded\": false\n}"
+        },
+        "description": "End 58.0 no deviation"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('End Heating 58 200', function() { pm.expect(pm.response.code).to.be.oneOf([200,201]); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

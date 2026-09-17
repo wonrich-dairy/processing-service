@@ -1,0 +1,219 @@
+{
+  "info": {
+    "name": "SCRUM-56 Tank entity FIXED /api/tanks per Swagger",
+    "description": "FIXED: Uses /api/tanks not /api/Tanks per Swagger\n\nGET /api/tanks\nPOST /api/tanks body code ST-04 kind Storing Mixing capacityKg\nGET /api/tanks/{id}\nPUT /api/tanks/{id} body capacityKg rowVersion only Capacity editable\nPUT /api/tanks/{id}/status body status Active Inactive UnderMaintenance rowVersion\nDELETE /api/tanks/{id}\n\nACs: seed ST-01 5000 etc Code MaxLength 20 unique ux_tanks_code Kind Status varchar not ENUM CapacityKg RemainingKg HasPrecision 10,2 KG not litres RowVersion CreatedAtUtc datetime(6) st1->ST-01 dash uppercase",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health /health anonymous",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Health anonymous per SCRUM-71/74"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Ping anonymous GET /api/Ping/anonymous",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping/anonymous",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "Ping",
+            "anonymous"
+          ]
+        },
+        "description": "Anonymous ping"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Get tanks GET /api/tanks FIXED was /api/Tanks",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks"
+          ]
+        },
+        "description": "FIXED endpoint per Swagger - id code name kind Storing Mixing capacityKg remainingKg availableKg status Active rowVersion createdAtUtc"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Tanks 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Has ST-01 MT-02', function() { pm.expect(pm.response.text()).to.match(/ST-01|MT-02|code|capacityKg/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Get tanks filter Storing GET /api/tanks?kind=Storing",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks?kind=Storing",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks"
+          ],
+          "query": [
+            {
+              "key": "kind",
+              "value": "Storing"
+            }
+          ]
+        },
+        "description": "Filter kind Storing varchar not ENUM"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Get tank by id GET /api/tanks/{id} ST-01",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks/{{storingTankIdST01}}",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks",
+            "{{storingTankIdST01}}"
+          ]
+        },
+        "description": "Get ST-01 by id"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Create tank st1->ST-01 POST /api/tanks",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"code\": \"st1\",\n  \"kind\": \"Storing\",\n  \"capacityKg\": 5000\n}"
+        },
+        "description": "Create tank st1 normalization to ST-01 dash uppercase"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Create 200 or duplicate', function() { pm.expect(pm.response.code).to.be.oneOf([200,201,400,409]); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

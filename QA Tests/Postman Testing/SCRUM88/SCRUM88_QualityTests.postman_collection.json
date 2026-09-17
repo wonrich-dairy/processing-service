@@ -1,0 +1,243 @@
+{
+  "info": {
+    "name": "SCRUM88 QualityTests FIXED per Swagger",
+    "description": "FIXED endpoints per Swagger - /api/processing-runs, /api/quality-tests, /api/tank-allocations, /api/processing-stages, /api/tanks all kebab-case not PascalCase",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Get processing runs GET /api/processing-runs FIXED",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-runs"
+          ]
+        },
+        "description": "FIXED was /api/ProcessingRuns"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Get run detail GET /api/processing-runs/{dispatchNumber}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-runs/{{dispatchNumberValid}}",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-runs",
+            "{{dispatchNumberValid}}"
+          ]
+        },
+        "description": "Run detail"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Get quality test GET /api/quality-tests/{dispatchNumber}",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/quality-tests/{{dispatchNumberValid}}",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "quality-tests",
+            "{{dispatchNumberValid}}"
+          ]
+        },
+        "description": "Quality Fat 3.85 etc"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Get allocations GET /api/tank-allocations",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tank-allocations",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tank-allocations"
+          ]
+        },
+        "description": "Allocations batchCode"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Get active stages GET /api/processing-stages/active",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/processing-stages/active",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "processing-stages",
+            "active"
+          ]
+        },
+        "description": "Active stages"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Get tanks GET /api/tanks",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks"
+          ]
+        },
+        "description": "Tanks ST-01 MT-02"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

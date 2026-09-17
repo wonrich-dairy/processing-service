@@ -1,0 +1,214 @@
+{
+  "info": {
+    "name": "00 - Auth - Get JWT Token - RUN THIS FIRST - FINAL 5189+5210",
+    "description": "Based on your logs:\n- Auth service runs on http://localhost:5189 (not 5000) - see log: Now listening on http://localhost:5189\n- Processing service runs on http://localhost:5210 - see log: Now listening on http://localhost:5210\n- Your 401 errors: GET TanksController.List 401 0ms = missing Bearer token\n- Your 404 errors: GET /api/Tanks/ST-01 404 = wrong endpoint (PascalCase + code not GUID)\n\nCORRECT FLOW:\n1. Run 01 LOCALHOST 5189 login -> token auto-saved to {{accessToken}}\n2. If 5189 not running, run 02 STAGING login fallback\n3. Run 03 Test token GET /api/Ping with token -> 200 OK\n4. Run 04 Health anonymous GET /health -> 200 Healthy (no token needed)\n5. Then run other SCRUM collections -> will be 200 OK not 401\n\nCredentials from auth log: userName=processing exists in users table, password=Wonrich@2026 -> INSERT INTO refresh_tokens success",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Get token LOCALHOST 5189 - POST http://localhost:5189/api/auth/login - processing/Wonrich@2026 - MAIN",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userName\": \"processing\",\n  \"password\": \"Wonrich@2026\"\n}"
+        },
+        "url": {
+          "raw": "{{authBaseUrl}}/api/auth/login",
+          "host": ["{{authBaseUrl}}"],
+          "path": ["api", "auth", "login"]
+        },
+        "description": "MAIN - Auth runs on 5189 per your log: Now listening on http://localhost:5189 - SELECT FROM users WHERE UserName=@normalised LIMIT 1 success - INSERT INTO refresh_tokens success"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Login 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Has accessToken', function() { pm.expect(pm.response.text()).to.include('accessToken'); });",
+              "pm.test('Save accessToken to environment', function() {",
+              "  try {",
+              "    const json = pm.response.json();",
+              "    if (json.accessToken) {",
+              "      pm.environment.set('accessToken', json.accessToken);",
+              "      console.log('Token saved, length: ' + json.accessToken.length);",
+              "      console.log('User: ' + json.userName + ' Role: ' + json.role + ' Facility: ' + json.facility);",
+              "    }",
+              "    if (json.refreshToken) pm.environment.set('refreshToken', json.refreshToken);",
+              "  } catch(e) { console.log('Failed to save token: ' + e); }",
+              "});",
+              "pm.test('Role ProcessingTechnician', function() {",
+              "  try { const j = pm.response.json(); pm.expect(j.role).to.eql('ProcessingTechnician'); } catch(e) {}",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Get token STAGING fallback - POST https://wonrich-auth-app-.../api/auth/login",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json", "type": "text"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userName\": \"processing\",\n  \"password\": \"Wonrich@2026\"\n}"
+        },
+        "url": {
+          "raw": "{{authBaseUrlStaging}}/api/auth/login",
+          "host": ["{{authBaseUrlStaging}}"],
+          "path": ["api", "auth", "login"]
+        },
+        "description": "Fallback if localhost:5189 not running - staging auth https://wonrich-auth-app-f4dndrgcgzgjb5h4.malaysiawest-01.azurewebsites.net"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Staging login 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Save token', function() { try { const j = pm.response.json(); if (j.accessToken) pm.environment.set('accessToken', j.accessToken); } catch(e){} });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Test token - GET http://localhost:5210/api/Ping - should be 200 with token",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["Ping"]
+        },
+        "description": "Proves JWT valid - your log shows GET PingController.GetAnonymous 200 10ms without token, and GET Ping with token should return identity"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Ping with token 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Test health anonymous - GET http://localhost:5210/health - 200 Healthy database ok",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        },
+        "description": "Anonymous per your log: HTTP GET Health checks 200 5581ms CorrelationId=... - SCRUM-71 Remote MySQL health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health anonymous 200 OK', function() { pm.response.to.have.status(200); });",
+              "pm.test('Healthy', function() { pm.expect(pm.response.text()).to.match(/Healthy/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Test Ping anonymous - GET http://localhost:5210/api/Ping/anonymous - 200 without token",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping/anonymous",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["Ping", "anonymous"]
+        },
+        "description": "Per your log: HTTP GET PingController.GetAnonymous 200 10ms - anonymous ping"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Ping anonymous 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Test tanks with token - GET http://localhost:5210/api/tanks - should be 200 not 401 - FIXES YOUR 401",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["tanks"]
+        },
+        "description": "This is the fix for your log: HTTP GET TanksController.List 401 0ms -> with Bearer token becomes 200 367ms - use kebab-case /api/tanks not /api/Tanks"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Tanks 200 OK not 401', function() { pm.response.to.have.status(200); });",
+              "pm.test('Has ST-01', function() { pm.expect(pm.response.text()).to.include('ST-01'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Test tank by GUID not code - GET http://localhost:5210/api/tanks/11111111-... - FIXES YOUR 404",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{accessToken}}", "type": "text"}
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks/11111111-1111-1111-1111-111111111111",
+          "host": ["{{baseUrlApi}}"],
+          "path": ["tanks", "11111111-1111-1111-1111-111111111111"]
+        },
+        "description": "Fixes your log: GET /api/Tanks/ST-01 404 4ms -> should be GET /api/tanks/{GUID} not code ST-01 - ST-01 GUID is 11111111-1111-1111-1111-111111111111"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Tank by GUID 200 OK not 404', function() { pm.response.to.have.status(200); });",
+              "pm.test('Is ST-01', function() { pm.expect(pm.response.text()).to.include('ST-01'); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

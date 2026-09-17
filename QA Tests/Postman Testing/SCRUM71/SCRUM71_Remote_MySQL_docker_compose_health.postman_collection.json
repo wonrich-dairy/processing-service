@@ -1,0 +1,134 @@
+{
+  "info": {
+    "name": "SCRUM-71 Remote MySQL FIXED",
+    "description": "FIXED /health and /api/Ping/anonymous per Swagger - health anonymous Healthy database ok",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health anonymous GET /health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        },
+        "description": "Health anonymous Healthy database ok remote MySQL"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health Healthy', function() { pm.response.to.have.status(200); pm.expect(pm.response.text()).to.match(/Healthy|database/i); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Ping anonymous GET /api/Ping/anonymous",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping/anonymous",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "Ping",
+            "anonymous"
+          ]
+        },
+        "description": "AllowAnonymous"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Ping auth GET /api/Ping",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/Ping",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "Ping"
+          ]
+        },
+        "description": "Auth 200 with token"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Get tanks GET /api/tanks proves remote MySQL",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks"
+          ]
+        },
+        "description": "Remote MySQL connection"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,234 @@
+{
+  "info": {
+    "name": "SCRUM-72 TankTemperatureLogs FIXED",
+    "description": "FIXED: Uses /api/tanks/{tankId}/temperature-logs not /api/TankTemperatureLogs per Swagger",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Health 200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "01 - Get tanks to get tankId GET /api/tanks",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks"
+          ]
+        },
+        "description": "Get tanks to save ST-01 id"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Tanks 200', function() { pm.response.to.have.status(200); });",
+              "pm.test('Save ST-01 id', function() { try { const arr=pm.response.json(); const st01=arr.find(t=>t.code==='ST-01'); if(st01) pm.environment.set('storingTankIdST01', st01.id); } catch(e){} });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Get temp logs GET /api/tanks/{tankId}/temperature-logs FIXED was /api/TankTemperatureLogs",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks/{{storingTankIdST01}}/temperature-logs",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks",
+            "{{storingTankIdST01}}",
+            "temperature-logs"
+          ]
+        },
+        "description": "FIXED per Swagger"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Temp logs 200', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Get last log GET /api/tanks/{tankId}/temperature-logs/last",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks/{{storingTankIdST01}}/temperature-logs/last",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks",
+            "{{storingTankIdST01}}",
+            "temperature-logs",
+            "last"
+          ]
+        },
+        "description": "Last temp log"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', function() { pm.response.to.have.status(200); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Create 2.4\u00b0C POST /api/tanks/{tankId}/temperature-logs",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks/{{storingTankIdST01}}/temperature-logs",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks",
+            "{{storingTankIdST01}}",
+            "temperature-logs"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"temperatureC\": 2.4,\n  \"note\": \"Valid 1-3\u00b0C\"\n}"
+        },
+        "description": "Create 2.4\u00b0C valid 1-3 outline"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Create 2.4 200', function() { pm.expect(pm.response.code).to.be.oneOf([200,201]); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Create 5.2\u00b0C deviation POST /api/tanks/{tankId}/temperature-logs",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}",
+            "type": "text"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrlApi}}/tanks/{{storingTankIdST01}}/temperature-logs",
+          "host": [
+            "{{baseUrlApi}}"
+          ],
+          "path": [
+            "tanks",
+            "{{storingTankIdST01}}",
+            "temperature-logs"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"temperatureC\": 5.2,\n  \"note\": \"Out-of-range 5.2 warns but saves\"\n}"
+        },
+        "description": "5.2\u00b0C warns but saves IsDeviation true"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Create 5.2 deviation 200', function() { pm.expect(pm.response.code).to.be.oneOf([200,201]); });"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ]
+    }
+  ]
+}

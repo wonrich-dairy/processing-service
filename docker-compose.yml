@@ -4,6 +4,7 @@
 # Config via .env file (gitignored, .env.example committed)
 # Kafka is no longer part of this file; it runs from the shared wonrich-infra repo.
 # Start it first:  (cd ../wonrich-infra && docker compose up -d)
+# SCRUM-68 - Publish processing events to Kafka via shared wonrich-infra broker, env vars added
 
 services:
   processing-service:
@@ -22,6 +23,11 @@ services:
       Auth__Issuer: ${Auth__Issuer:-wonrich-auth}
       Auth__Audience: ${Auth__Audience:-wonrich-services}
       Auth__SigningKey: ${Auth__SigningKey:-replace-with-the-shared-signing-key-at-least-32-characters}
+      Kafka__BootstrapServers: ${KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      Kafka__SecurityProtocol: ${KAFKA_SECURITY_PROTOCOL:-Plaintext}
+      Kafka__SaslMechanism: ${KAFKA_SASL_MECHANISM:-}
+      Kafka__SaslUsername: ${KAFKA_SASL_USERNAME:-}
+      Kafka__SaslPassword: ${KAFKA_SASL_PASSWORD:-}
     ports:
       - "5210:8080"
     networks:

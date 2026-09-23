@@ -21,6 +21,7 @@ public class ProcessingDbContext : DbContext
     public DbSet<MccDispatchTrace> MccDispatchTraces => Set<MccDispatchTrace>();
     public DbSet<ProcessingRunStoringAllocation> ProcessingRunStoringAllocations => Set<ProcessingRunStoringAllocation>();
     public DbSet<TankTemperatureLog> TankTemperatureLogs => Set<TankTemperatureLog>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -177,6 +178,27 @@ public class ProcessingDbContext : DbContext
             stage.Property(s => s.CultureAddedAtUtc).HasColumnType("datetime(6)");
             stage.HasOne(s => s.ProcessingRun).WithMany(r => r.Stages).HasForeignKey(s => s.ProcessingRunId).OnDelete(DeleteBehavior.Cascade);
             stage.HasOne(s => s.MixingTank).WithMany(t => t.Stages).HasForeignKey(s => s.MixingTankId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // OutboxMessage - SCRUM-68 outbox pattern for publish-after-commit
+        modelBuilder.Entity<OutboxMessage>(outbox =>
+        {
+            outbox.ToTable("outbox_messages");
+            outbox.HasKey(o => o.Id);
+            outbox.Property(o => o.Topic).HasMaxLength(200).IsRequired();
+            outbox.Property(o => o.Key).HasMaxLength(200).IsRequired();
+            outbox.Property(o => o.EventType).HasMaxLength(100).IsRequired();
+            outbox.Property(o => o.Payload).HasColumnType("longtext").IsRequired();
+            outbox.Property(o => o.HeadersJson).HasColumnType("text").IsRequired();
+            outbox.Property(o => o.CreatedAtUtc).HasColumnType("datetime(6)").IsRequired();
+            outbox.Property(o => o.ProcessedAtUtc).HasColumnType("datetime(6)");
+            outbox.Property(o => o.RetryCount).IsRequired();
+            outbox.Property(o => o.LastError).HasMaxLength(1000);
+            outbox.Property(o => o.Status).HasMaxLength(20).IsRequired();
+            outbox.Property(o => o.CorrelationId).HasMaxLength(100).IsRequired();
+            outbox.HasIndex(o => o.Status).HasDatabaseName("ix_outbox_status");
+            outbox.HasIndex(o => o.CreatedAtUtc).HasDatabaseName("ix_outbox_created");
+            outbox.HasIndex(o => new { o.Status, o.CreatedAtUtc }).HasDatabaseName("ix_outbox_status_created");
         });
 
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(ProcessingDbContext).Assembly);

@@ -10,7 +10,8 @@ namespace ProcessingService.Application.Kafka;
 /// Outbox relay background service - polls outbox_messages table and publishes to Kafka
 /// SCRUM-68: Events published only after DB transaction commits (outbox pattern)
 /// Broker unavailability does not fail originating DB write - relay retries separately
-/// Failed publishes retried, then routed to DLQ
+/// Failed publishes retried up to MaxRetries, then marked Poisoned in outbox_messages for human review (review fix: no producer-side DLQ)
+/// Rows claimed via SELECT ... FOR UPDATE SKIP LOCKED inside one READ COMMITTED transaction (review fix: two relay instances never double-publish; at-least-once delivery, consumers dedupe on eventId)
 /// Correlation ID present in headers, traceable in Loki
 /// </summary>
 public sealed class OutboxRelayService : BackgroundService
@@ -55,13 +56,25 @@ public sealed class OutboxRelayService : BackgroundService
         var producer = scope.ServiceProvider.GetRequiredService<IKafkaProducer>();
 
         List<Domain.Entities.OutboxMessage> pending;
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction tx;
         try
         {
-            // Get pending messages ordered by CreatedAtUtc (FIFO) - publish-after-commit order
-            pending = await db.OutboxMessages
-                .Where(m => m.Status == "Pending")
-                .OrderBy(m => m.CreatedAtUtc)
-                .Take(BatchSize)
+            // Review fix #7: claim rows with FOR UPDATE SKIP LOCKED (MySQL 8.0.1+) so two relay instances never publish the same row
+            await db.Database.OpenConnectionAsync(cancellationToken);
+            // READ COMMITTED for the claim transaction: record locks only, no next-key/gap locks - business transactions
+            // inserting NEW outbox rows are never blocked while this claim transaction is open, so the AC
+            // "broker outage does not fail originating DB write" holds even while a batch is being published
+            await db.Database.ExecuteSqlRawAsync("SET TRANSACTION ISOLATION LEVEL READ COMMITTED", cancellationToken);
+            tx = await db.Database.BeginTransactionAsync(cancellationToken);
+
+            // All mapped columns selected explicitly (FromSql requirement); `Key` backticked - reserved word in MySQL
+            pending = await db.OutboxMessages.FromSqlInterpolated($@"
+SELECT Id, Topic, `Key`, EventType, Payload, HeadersJson, CreatedAtUtc, ProcessedAtUtc, RetryCount, LastError, Status, CorrelationId
+FROM outbox_messages
+WHERE Status = {"Pending"}
+ORDER BY CreatedAtUtc
+LIMIT {BatchSize}
+FOR UPDATE SKIP LOCKED")
                 .ToListAsync(cancellationToken);
         }
         catch (Exception ex) when (ex.Message.Contains("outbox_messages") && ex.Message.Contains("doesn't exist"))
@@ -71,12 +84,15 @@ public sealed class OutboxRelayService : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to query outbox_messages - will retry, may be migration pending");
+            _logger.LogWarning(ex, "Failed to claim outbox batch - will retry, may be migration pending or DB unavailable");
             return;
         }
 
         if (pending.Count == 0)
+        {
+            await tx.RollbackAsync(CancellationToken.None); // nothing claimed, release locks
             return;
+        }
 
         _logger.LogDebug("Processing {Count} outbox messages", pending.Count);
 
@@ -108,29 +124,13 @@ public sealed class OutboxRelayService : BackgroundService
 
                     if (message.RetryCount >= MaxRetries)
                     {
-                        // Route to DLQ after retry limit
-                        _logger.LogWarning("Outbox message {Id} failed after {MaxRetries} retries, routing to DLQ, topic={Topic} key={Key}",
-                            message.Id, MaxRetries, message.Topic, message.Key);
-
-                        var dlqSuccess = await producer.PublishToDlqAsync(
-                            message.Topic,
-                            message.Key,
-                            message.Payload,
-                            message.HeadersJson,
-                            message.CorrelationId,
-                            message.LastError,
-                            cancellationToken);
-
-                        if (dlqSuccess)
-                        {
-                            message.Status = "Failed"; // Failed but routed to DLQ
-                            message.ProcessedAtUtc = DateTime.UtcNow;
-                        }
-                        else
-                        {
-                            // DLQ also failed, keep as Pending for next retry cycle
-                            _logger.LogError("Failed to publish outbox message {Id} to DLQ, will retry", message.Id);
-                        }
+                        // Review fix: producer-side DLQ removed - a DLQ topic on the same unreachable broker fails identically.
+                        // Failure sink is the outbox table itself: mark Poisoned (terminal, visible, left for a human to inspect/requeue).
+                        message.Status = "Poisoned";
+                        message.ProcessedAtUtc = DateTime.UtcNow;
+                        _logger.LogError(
+                            "Outbox message {Id} topic={Topic} key={Key} correlationId={CorrelationId} failed {MaxRetries} times - marked POISONED in outbox_messages, needs human review. Requeue by setting Status='Pending', RetryCount=0. LastError: {LastError}",
+                            message.Id, message.Topic, message.Key, message.CorrelationId, MaxRetries, message.LastError);
                     }
                     else
                     {
@@ -149,32 +149,27 @@ public sealed class OutboxRelayService : BackgroundService
 
                 if (message.RetryCount >= MaxRetries)
                 {
-                    try
-                    {
-                        var dlqSuccess = await producer.PublishToDlqAsync(
-                            message.Topic,
-                            message.Key,
-                            message.Payload,
-                            message.HeadersJson,
-                            message.CorrelationId,
-                            ex.Message,
-                            cancellationToken);
-
-                        if (dlqSuccess)
-                        {
-                            message.Status = "Failed";
-                            message.ProcessedAtUtc = DateTime.UtcNow;
-                        }
-                    }
-                    catch (Exception dlqEx)
-                    {
-                        _logger.LogError(dlqEx, "Failed to publish outbox message {Id} to DLQ", message.Id);
-                    }
+                    // Review fix: same as failure path - no producer-side DLQ, terminal state is Poisoned in the outbox table
+                    message.Status = "Poisoned";
+                    message.ProcessedAtUtc = DateTime.UtcNow;
+                    _logger.LogError(
+                        "Outbox message {Id} topic={Topic} key={Key} correlationId={CorrelationId} threw exceptions {MaxRetries} times - marked POISONED in outbox_messages, needs human review. Requeue by setting Status='Pending', RetryCount=0. LastError: {LastError}",
+                        message.Id, message.Topic, message.Key, message.CorrelationId, MaxRetries, message.LastError);
                 }
             }
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+            await tx.CommitAsync(cancellationToken); // claim + status updates commit atomically; crash before this -> rollback -> rows stay Pending (at-least-once, consumers dedupe on eventId)
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(CancellationToken.None);
+            _logger.LogWarning(ex, "Outbox batch rolled back - claimed rows stay Pending, retried next cycle");
+            return;
+        }
 
         if (pending.Any(m => m.Status == "Processed"))
             _logger.LogInformation("Processed {Count} outbox messages, {Pending} still pending",

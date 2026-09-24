@@ -11,9 +11,4 @@ public interface IKafkaProducer
     /// Returns true if published, false if failed (should retry)
     /// </summary>
     Task<bool> PublishAsync(string topic, string key, string payloadJson, string headersJson, string correlationId, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Publish to DLQ topic after retry limit
-    /// </summary>
-    Task<bool> PublishToDlqAsync(string originalTopic, string key, string payloadJson, string headersJson, string correlationId, string lastError, CancellationToken cancellationToken);
 }

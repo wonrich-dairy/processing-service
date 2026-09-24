@@ -25,7 +25,8 @@ public sealed class OutboxWriter : IOutboxWriter
         var payloadJson = JsonSerializer.Serialize(@event, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
         var headers = new Dictionary<string, string>
         {
-            ["correlationId"] = correlationId,
+            ["x-correlation-id"] = correlationId, // review fix #9: single canonical header name (KafkaCorrelationHelper.KafkaHeaderName)
+            ["eventId"] = @event.EventId.ToString(), // consumer dedupe key - relay is at-least-once (review fix #7)
             ["eventType"] = @event.GetType().Name,
             ["schemaVersion"] = @event.SchemaVersion,
             ["timestamp"] = @event.TimestampUtc.ToString("o")

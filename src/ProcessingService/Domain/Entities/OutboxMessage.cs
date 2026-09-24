@@ -36,8 +36,8 @@ public class OutboxMessage
     /// <summary>Last error message for debugging</summary>
     public string? LastError { get; set; }
 
-    /// <summary>Status: Pending, Processed, Failed (after retry limit, routed to DLQ)</summary>
-    public string Status { get; set; } = "Pending"; // Pending, Processed, Failed
+    /// <summary>Status: Pending (awaiting publish), Processed (published), Poisoned (past retry budget, needs human review - requeue via Status='Pending', RetryCount=0)</summary>
+    public string Status { get; set; } = "Pending"; // Pending, Processed, Poisoned
 
     /// <summary>Correlation ID for tracing across hop</summary>
     public string CorrelationId { get; set; } = string.Empty;

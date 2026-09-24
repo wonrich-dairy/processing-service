@@ -9,18 +9,16 @@ namespace ProcessingService.Application.Kafka;
 /// <summary>
 /// Kafka producer implementation using Confluent.Kafka
 /// SCRUM-68: Broker unavailability does not fail originating DB write - producer only called from OutboxRelayService after commit
-/// Failed publishes retried, then routed to DLQ
+/// Failed publishes retried by relay; rows past retry budget marked Poisoned in outbox_messages (review fix: producer-side DLQ removed - DLQ topic on an unreachable broker fails identically)
 /// Correlation ID present in message headers, traceable across hop in Loki
 /// </summary>
 public sealed class KafkaProducer : IKafkaProducer, IDisposable
 {
     private readonly IProducer<string, string> _producer;
     private readonly ILogger<KafkaProducer> _logger;
-    private readonly IConfiguration _config;
 
     public KafkaProducer(IConfiguration config, ILogger<KafkaProducer> logger)
     {
-        _config = config;
         _logger = logger;
 
         var bootstrapServers = config["Kafka:BootstrapServers"] ?? config["Kafka__BootstrapServers"] ?? "localhost:29092";
@@ -60,20 +58,23 @@ public sealed class KafkaProducer : IKafkaProducer, IDisposable
         try
         {
             var headers = new Headers();
-            headers.Add("correlationId", Encoding.UTF8.GetBytes(correlationId));
-            headers.Add("x-correlation-id", Encoding.UTF8.GetBytes(correlationId)); // For Loki tracing per SCRUM-90
+            // Review fix #9: ONE canonical header name - x-correlation-id (matches KafkaCorrelationHelper.KafkaHeaderName and Processing structured logs, which Loki queries key off)
+            headers.Add("x-correlation-id", Encoding.UTF8.GetBytes(correlationId));
             headers.Add("eventType", Encoding.UTF8.GetBytes(ExtractEventType(headersJson)));
             headers.Add("timestamp", Encoding.UTF8.GetBytes(DateTime.UtcNow.ToString("o")));
 
-            // Add all headers from headersJson
+            // Add remaining headers from headersJson
             try
             {
                 var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(headersJson);
                 if (dict != null)
                 {
+                    // Skip keys already set explicitly above, plus the legacy "correlationId" name found in outbox rows stored before the rename
+                    // (also fixes pre-existing duplicate eventType/timestamp headers)
+                    var reserved = new HashSet<string>(StringComparer.Ordinal) { "x-correlation-id", "correlationId", "eventType", "timestamp" };
                     foreach (var kv in dict)
                     {
-                        if (kv.Key == "correlationId") continue; // already added
+                        if (reserved.Contains(kv.Key)) continue;
                         headers.Add(kv.Key, Encoding.UTF8.GetBytes(kv.Value ?? ""));
                     }
                 }
@@ -109,69 +110,6 @@ public sealed class KafkaProducer : IKafkaProducer, IDisposable
         }
     }
 
-    public async Task<bool> PublishToDlqAsync(string originalTopic, string key, string payloadJson, string headersJson, string correlationId, string lastError, CancellationToken cancellationToken)
-    {
-        // DLQ topic per consumer group, not per source topic: what matters when replaying is which consumer failed
-        // For processing service, DLQ topics: wonrich.dlq.processing-stage-events.v1, wonrich.dlq.processing-hold-events.v1, etc.
-        // Map original topic to DLQ topic
-        var dlqTopic = MapToDlqTopic(originalTopic);
-
-        try
-        {
-            var headers = new Headers();
-            headers.Add("correlationId", Encoding.UTF8.GetBytes(correlationId));
-            headers.Add("originalTopic", Encoding.UTF8.GetBytes(originalTopic));
-            headers.Add("lastError", Encoding.UTF8.GetBytes(lastError));
-            headers.Add("failedAt", Encoding.UTF8.GetBytes(DateTime.UtcNow.ToString("o")));
-
-            var dlqPayload = new
-            {
-                originalTopic,
-                key,
-                payload = JsonSerializer.Deserialize<object>(payloadJson),
-                lastError,
-                failedAt = DateTime.UtcNow,
-                correlationId
-            };
-            var dlqJson = JsonSerializer.Serialize(dlqPayload);
-
-            var message = new Message<string, string>
-            {
-                Key = key,
-                Value = dlqJson,
-                Headers = headers
-            };
-
-            var result = await _producer.ProduceAsync(dlqTopic, message, cancellationToken);
-            _logger.LogWarning("Routed failed event from {OriginalTopic} to DLQ {DlqTopic} key={Key} correlationId={CorrelationId}",
-                originalTopic, dlqTopic, key, correlationId);
-
-            return result.Status == PersistenceStatus.Persisted;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to publish to DLQ {DlqTopic} for original {OriginalTopic} key={Key}",
-                dlqTopic, originalTopic, key);
-            return false;
-        }
-    }
-
-    private static string MapToDlqTopic(string originalTopic)
-    {
-        // wonrich.processing.stage-events.v1 -> wonrich.dlq.processing-stage-events.v1
-        // wonrich.processing.hold-events.v1 -> wonrich.dlq.processing-hold-events.v1
-        if (originalTopic.Contains("stage-events"))
-            return "wonrich.dlq.processing-stage-events.v1";
-        if (originalTopic.Contains("hold-events"))
-            return "wonrich.dlq.processing-hold-events.v1";
-        if (originalTopic.Contains("lab-results"))
-            return "wonrich.dlq.processing-lab-results.v1";
-        // Fallback: prefix with dlq
-        if (originalTopic.StartsWith("wonrich."))
-            return originalTopic.Replace("wonrich.", "wonrich.dlq.");
-        return $"wonrich.dlq.{originalTopic}.v1";
-    }
-
     private static string ExtractEventType(string headersJson)
     {
         try
@@ -192,7 +130,9 @@ public sealed class KafkaProducer : IKafkaProducer, IDisposable
 }
 
 /// <summary>
-/// No-op producer for local dev without Kafka or when Kafka disabled - ensures DB write still succeeds when broker unavailable
+/// No-op producer used when Kafka is not configured (local dev).
+/// SCRUM-68 review fix: returns FALSE - outbox rows must stay Pending, never marked Processed.
+/// Marking them success would silently lose events (reviewer blocking point #1).
 /// </summary>
 public sealed class NoOpKafkaProducer : IKafkaProducer
 {
@@ -205,16 +145,9 @@ public sealed class NoOpKafkaProducer : IKafkaProducer
 
     public Task<bool> PublishAsync(string topic, string key, string payloadJson, string headersJson, string correlationId, CancellationToken cancellationToken)
     {
-        _logger.LogInformation("[NoOp] Would publish to {Topic} key={Key} correlationId={CorrelationId} - Kafka disabled or unavailable, treating as success for retry logic",
+        // Return false: relay keeps the row Pending and retries - event is NOT lost, it publishes when Kafka is configured
+        _logger.LogWarning("[NoOp] Kafka not configured - event for {Topic} key={Key} correlationId={CorrelationId} stays PENDING in outbox_messages (not lost, will publish once Kafka is configured)",
             topic, key, correlationId);
-        // Return false to trigger retry logic, but DB write already succeeded
-        // Actually for NoOp we return true to avoid infinite retry in dev without Kafka
-        return Task.FromResult(true);
-    }
-
-    public Task<bool> PublishToDlqAsync(string originalTopic, string key, string payloadJson, string headersJson, string correlationId, string lastError, CancellationToken cancellationToken)
-    {
-        _logger.LogWarning("[NoOp] Would publish to DLQ for {OriginalTopic} key={Key} - Kafka disabled", originalTopic, key);
-        return Task.FromResult(true);
+        return Task.FromResult(false);
     }
 }

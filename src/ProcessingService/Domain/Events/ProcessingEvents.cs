@@ -13,6 +13,9 @@ namespace ProcessingService.Domain.Events;
 /// </summary>
 public abstract record ProcessingEventBase
 {
+    /// <summary>Unique event ID for consumer-side deduplication - relay is at-least-once (crash between publish and outbox commit can republish), consumers keep a seen-EventId window and skip duplicates</summary>
+    public Guid EventId { get; init; } = Guid.NewGuid();
+
     /// <summary>Batch code [day]-[product]-[letter] e.g. 258-DY-A - business identifier, message key for ordering per key</summary>
     public string BatchId { get; init; } = string.Empty;
 
@@ -28,7 +31,7 @@ public abstract record ProcessingEventBase
     /// <summary>Schema version - v1</summary>
     public string SchemaVersion { get; init; } = "v1";
 
-    /// <summary>Correlation ID for tracing across hop in Loki - present in message headers</summary>
+    /// <summary>Correlation ID for tracing across hop in Loki - Kafka header x-correlation-id (single canonical name), also this payload field</summary>
     public string CorrelationId { get; init; } = string.Empty;
 }
 

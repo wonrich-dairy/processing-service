@@ -75,12 +75,15 @@ if (!string.IsNullOrWhiteSpace(kafkaBootstrap))
 }
 else
 {
-    // No Kafka configured - use NoOp producer for local dev without Kafka, ensures DB write still succeeds
+    // No Kafka configured - NoOp producer: DB writes still succeed, outbox rows stay PENDING until Kafka is configured (never marked sent)
     builder.Services.AddSingleton<ProcessingService.Application.Kafka.IKafkaProducer, ProcessingService.Application.Kafka.NoOpKafkaProducer>();
 }
 
-// Outbox relay - polls outbox_messages every 5s, publishes to Kafka, retry + DLQ
+// Outbox relay - polls outbox_messages every 5s, publishes to Kafka, retries then marks Poisoned
 builder.Services.AddHostedService<ProcessingService.Application.Kafka.OutboxRelayService>();
+
+// Outbox cleanup - daily delete of Processed rows past retention so outbox_messages does not grow forever (Poisoned rows kept for human review)
+builder.Services.AddHostedService<ProcessingService.Application.Kafka.OutboxCleanupService>();
 
 // Allocation storing->mixing with batch code [day]-[product]-[letter] per real process, now with Kafka outbox per SCRUM-68
 builder.Services.AddScoped<ProcessingService.Application.Allocations.ITankAllocationService, ProcessingService.Application.Allocations.TankAllocationService>();
@@ -99,7 +102,7 @@ builder.Services.AddProcessingObservability(builder.Configuration);
 // Health + ProblemDetails + Swagger (SCRUM-77: own Swagger UI, auth reflected, XML comments, disabled in prod)
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
-builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database").AddCheck<KafkaConfigHealthCheck>("kafka");
 builder.Services.AddProcessingSwagger();
 
 var app = builder.Build();

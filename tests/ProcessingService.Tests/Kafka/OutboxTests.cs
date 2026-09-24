@@ -40,10 +40,6 @@ public sealed class OutboxTests
             Published.Add((topic, key, payloadJson));
             return Task.FromResult(true);
         }
-        public Task<bool> PublishToDlqAsync(string originalTopic, string key, string payloadJson, string headersJson, string correlationId, string lastError, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(true);
-        }
     }
 
     private sealed class FakeKafkaProducerFail : IKafkaProducer
@@ -53,10 +49,6 @@ public sealed class OutboxTests
         {
             Attempts++;
             return Task.FromResult(false); // Simulate broker unavailable
-        }
-        public Task<bool> PublishToDlqAsync(string originalTopic, string key, string payloadJson, string headersJson, string correlationId, string lastError, CancellationToken cancellationToken)
-        {
-            return Task.FromResult(true);
         }
     }
 
@@ -281,7 +273,7 @@ public sealed class OutboxTests
     }
 
     [Fact]
-    public async Task FailedPublishesRetriedThenRoutedToDlq()
+    public async Task FailedPublishesRetriedThenMarkedPoisonedForHumanReview()
     {
         // Arrange
         var db = CreateInMemoryDb();
@@ -307,7 +299,7 @@ public sealed class OutboxTests
 
         var outboxMsg = await db.OutboxMessages.FirstAsync(o => o.Key == "265-DY-D");
 
-        // Act: Fail 5 times (max retries)
+        // Act: Fail 5 times (max retries), mirroring OutboxRelayService failure path
         for (int i = 0; i < 5; i++)
         {
             var success = await failingProducer.PublishAsync(outboxMsg.Topic, outboxMsg.Key, outboxMsg.Payload, outboxMsg.HeadersJson, outboxMsg.CorrelationId, CancellationToken.None);
@@ -316,26 +308,24 @@ public sealed class OutboxTests
                 outboxMsg.RetryCount++;
                 outboxMsg.LastError = $"Attempt {i + 1} failed";
             }
-        }
 
-        // After max retries, route to DLQ
-        if (outboxMsg.RetryCount >= 5)
-        {
-            var dlqSuccess = await failingProducer.PublishToDlqAsync(outboxMsg.Topic, outboxMsg.Key, outboxMsg.Payload, outboxMsg.HeadersJson, outboxMsg.CorrelationId, outboxMsg.LastError ?? "failed", CancellationToken.None);
-            if (dlqSuccess)
+            // Review fix: past retry budget the relay marks Poisoned in the outbox table - no producer-side DLQ
+            // (a DLQ topic on the same unreachable broker would fail identically)
+            if (outboxMsg.RetryCount >= 5)
             {
-                outboxMsg.Status = "Failed";
+                outboxMsg.Status = "Poisoned";
                 outboxMsg.ProcessedAtUtc = DateTime.UtcNow;
             }
         }
 
         await db.SaveChangesAsync();
 
-        // Assert: After retry limit, routed to DLQ, status Failed but not lost
-        var failedMsg = await db.OutboxMessages.FirstAsync(o => o.Key == "265-DY-D");
-        Assert.Equal("Failed", failedMsg.Status);
-        Assert.Equal(5, failedMsg.RetryCount);
-        // DOD: Failed publishes retried, then routed to DLQ
+        // Assert: After retry limit, status Poisoned (terminal, visible, left for human), event row not lost, no DLQ publish attempted
+        var poisonedMsg = await db.OutboxMessages.FirstAsync(o => o.Key == "265-DY-D");
+        Assert.Equal("Poisoned", poisonedMsg.Status);
+        Assert.Equal(5, poisonedMsg.RetryCount);
+        Assert.NotNull(poisonedMsg.LastError);
+        // DOD: Failed publishes retried, then visibly parked for human review
     }
 
     [Fact]
@@ -415,6 +405,24 @@ public sealed class OutboxTests
     }
 
     [Fact]
+    public void EventContracts_CarryUniqueEventIdForConsumerDedupe()
+    {
+        // Review fix #7: relay is at-least-once (crash between broker publish and outbox commit can republish the same event)
+        // Every event gets a unique EventId at construction; consumers keep a seen-EventId window and skip duplicates
+        var first = new MilkAllocatedToMixingTankEvent { BatchId = "258-DY-A", DispatchNumber = "DN-20260910-01", TimestampUtc = DateTime.UtcNow, CorrelationId = Guid.NewGuid().ToString() };
+        var second = new MilkAllocatedToMixingTankEvent { BatchId = "258-DY-A", DispatchNumber = "DN-20260910-01", TimestampUtc = DateTime.UtcNow, CorrelationId = Guid.NewGuid().ToString() };
+
+        Assert.NotEqual(Guid.Empty, first.EventId);
+        Assert.NotEqual(first.EventId, second.EventId);
+
+        // eventId must be in the serialized payload exactly as OutboxWriter serializes it (camelCase)
+        var payloadJson = JsonSerializer.Serialize(first, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+        using var doc = JsonDocument.Parse(payloadJson);
+        Assert.True(doc.RootElement.TryGetProperty("eventId", out var eventIdProp), "payload must carry eventId for consumer dedupe");
+        Assert.Equal(first.EventId.ToString(), eventIdProp.GetString());
+    }
+
+    [Fact]
     public void CorrelationId_PresentInHeaders_TraceableInLoki()
     {
         var correlationId = Guid.NewGuid().ToString();
@@ -429,16 +437,18 @@ public sealed class OutboxTests
         var payloadJson = JsonSerializer.Serialize(@event);
         var headers = new Dictionary<string, string>
         {
-            ["correlationId"] = correlationId,
+            ["x-correlation-id"] = correlationId, // review fix #9: single canonical header name
+            ["eventId"] = @event.EventId.ToString(),
             ["eventType"] = @event.GetType().Name,
             ["schemaVersion"] = @event.SchemaVersion
         };
         var headersJson = JsonSerializer.Serialize(headers);
 
-        // Assert: Correlation ID present in headers per DOD
+        // Assert: Correlation ID present in headers per DOD, under the ONE canonical name the producer emits
         Assert.Contains(correlationId, headersJson);
-        Assert.Contains("correlationId", headersJson);
-        Assert.Contains("eventType", headersJson);
-        // In real producer, headers added to Kafka message Headers, traceable in Loki via structured logging
+        Assert.Contains("x-correlation-id", headersJson);
+        Assert.Contains("eventId", headersJson);
+        Assert.DoesNotContain("\"correlationId\":", headersJson); // legacy header name must not appear
+        // In real producer, headers added to Kafka message Headers, traceable in Loki via x-correlation-id
     }
 }

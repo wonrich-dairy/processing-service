@@ -163,6 +163,11 @@ FOR UPDATE SKIP LOCKED")
                         _logger.LogInformation("Outbox message {Id} publish failed, will retry {RetryCount}/{MaxRetries}",
                             message.Id, message.RetryCount, _maxRetries);
                     }
+
+                    // Stop the batch at the first failure (DevOps review 2026-09-25): continuing could publish a LATER
+                    // event for the same batch (same key) before this earlier one if the broker recovers mid-batch -
+                    // per-key order is the contract. Also avoids burning a ~10s broker timeout per remaining row while down.
+                    break;
                 }
             }
             catch (Exception ex)
@@ -182,6 +187,9 @@ FOR UPDATE SKIP LOCKED")
                         "Outbox message {Id} topic={Topic} key={Key} correlationId={CorrelationId} threw exceptions {MaxRetries} times - marked POISONED in outbox_messages, needs human review. Requeue by setting Status='Pending', RetryCount=0. LastError: {LastError}",
                         message.Id, message.Topic, message.Key, message.CorrelationId, _maxRetries, message.LastError);
                 }
+
+                // Same as the failure path: stop at the first exception - per-key ordering and no timeout burn (DevOps review)
+                break;
             }
         }
 

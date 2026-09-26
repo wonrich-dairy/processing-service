@@ -299,8 +299,9 @@ public sealed class OutboxTests
 
         var outboxMsg = await db.OutboxMessages.FirstAsync(o => o.Key == "265-DY-D");
 
-        // Act: Fail 5 times (max retries), mirroring OutboxRelayService failure path
-        for (int i = 0; i < 5; i++)
+        // Act: Fail MaxRetries times (Outbox:MaxRetries default 20), mirroring OutboxRelayService failure path
+        const int maxRetries = 20;
+        for (int i = 0; i < maxRetries; i++)
         {
             var success = await failingProducer.PublishAsync(outboxMsg.Topic, outboxMsg.Key, outboxMsg.Payload, outboxMsg.HeadersJson, outboxMsg.CorrelationId, CancellationToken.None);
             if (!success)
@@ -311,7 +312,7 @@ public sealed class OutboxTests
 
             // Review fix: past retry budget the relay marks Poisoned in the outbox table - no producer-side DLQ
             // (a DLQ topic on the same unreachable broker would fail identically)
-            if (outboxMsg.RetryCount >= 5)
+            if (outboxMsg.RetryCount >= maxRetries)
             {
                 outboxMsg.Status = "Poisoned";
                 outboxMsg.ProcessedAtUtc = DateTime.UtcNow;
@@ -323,7 +324,7 @@ public sealed class OutboxTests
         // Assert: After retry limit, status Poisoned (terminal, visible, left for human), event row not lost, no DLQ publish attempted
         var poisonedMsg = await db.OutboxMessages.FirstAsync(o => o.Key == "265-DY-D");
         Assert.Equal("Poisoned", poisonedMsg.Status);
-        Assert.Equal(5, poisonedMsg.RetryCount);
+        Assert.Equal(maxRetries, poisonedMsg.RetryCount);
         Assert.NotNull(poisonedMsg.LastError);
         // DOD: Failed publishes retried, then visibly parked for human review
     }

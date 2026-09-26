@@ -176,7 +176,7 @@ Depends on: SCRUM-88 (topics), SCRUM-58 (outbox shared client)
 4. OutboxRelayService background polls every 5s, batch 20, ordered by CreatedAtUtc FIFO
 5. Relay calls IKafkaProducer.PublishAsync with topic, key, payload, headers (correlationId)
 6. If publish succeeds → mark Processed, ProcessedAtUtc = now
-7. If publish fails → RetryCount++, LastError, retry up to MaxRetries 5
+7. If publish fails → RetryCount++, LastError, and the relay STOPS the batch at the first failure (preserves per-key publish order; remaining rows stay Pending with retry budget unspent). Retry budget is configurable, Outbox:MaxRetries default 20; while the broker stays unreachable the relay backs off exponentially between batches (5s → 10s → ... capped at 5m), so the effective window before a row exhausts the budget is roughly 1-2 hours
 8. After MaxRetries → mark row Poisoned in outbox_messages (terminal, visible, left for human review; requeue via Status='Pending', RetryCount=0. No producer-side DLQ - DLQ on unreachable broker fails identically)
 9. Broker outage → DB write still succeeds (outbox in same transaction already committed), relay retries later - factory floor never notices
 10. OutboxCleanupService runs daily: deletes Processed rows older than `Outbox:ProcessedRetentionDays` (default 7) so the table does not grow forever. Poisoned rows are never auto-deleted - they are the failure record for human review. Uses existing ix_outbox_status index, no extra schema (review fix: index + cleanup; extra (Status, ProcessedAtUtc) index only needed if volume ever demands it)
@@ -184,6 +184,8 @@ Depends on: SCRUM-88 (topics), SCRUM-58 (outbox shared client)
 **Rollback case:** If DB transaction fails (e.g., concurrency, validation), outbox message not committed → no event published - tested via unit test forcing transaction failure
 
 **Broker-unavailable case:** Stop broker `docker compose stop kafka` in wonrich-infra, do DB write (allocation), verify DB write succeeds and outbox message stays Pending with RetryCount increasing, then start broker `docker compose up -d kafka`, verify relay publishes and marks Processed
+
+**Kafka-not-configured case:** When `Kafka:BootstrapServers` is missing entirely, the NoOp producer keeps the service running with rows Pending (never marked sent) and `/health` reports `Degraded` via KafkaConfigHealthCheck (SCRUM-68 review: the fallback must be visible, not silent)
 
 **Correlation ID:** Guid per event, present in message headers as `x-correlation-id` - the ONE canonical header name (review fix: legacy `correlationId` header removed; name matches KafkaCorrelationHelper.KafkaHeaderName and Processing structured logs, which Loki queries key off). Also in payload as `correlationId` contract field. Consumers must read `x-correlation-id`.
 

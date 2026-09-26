@@ -1,0 +1,82 @@
+# Unit tests for the alert rules and the dashboard's queries (SCRUM-111).
+#
+#   docker run --rm -v "$PWD/infra/observability/prometheus:/p" --entrypoint promtool \
+#     prom/prometheus:v3.1.0 test rules /p/alerts.test.yml
+#
+# They prove that ServiceDown and HighErrorRate cover a service by label and metric-name pattern
+# (so Quality Lab Service needed no rule of its own), and that the dashboard queries return every
+# service following the <service>_http_* convention.
+rule_files: [alerts.yml]
+evaluation_interval: 15s
+tests:
+  # ServiceDown now keys on `service`, so the new service is covered with no rule change
+  - interval: 15s
+    input_series:
+      - series: 'up{job="quality-lab-service", service="quality-lab-service", environment="staging", instance="qls"}'
+        values: '0x20'
+      - series: 'up{job="processing-service", service="processing-service", environment="staging", instance="proc"}'
+        values: '1x20'
+      - series: 'up{job="prometheus", service="prometheus", environment="staging", instance="localhost:9090"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ServiceDown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: quality-lab-service, service: quality-lab-service, environment: staging, instance: qls}
+            exp_annotations:
+              summary: "quality-lab-service (staging) is not responding to scrapes"
+              description: "Prometheus has failed to scrape quality-lab-service at qls for two minutes. Either the service is down, or it is up but no longer serving /metrics."
+
+  # HighErrorRate picks up quality_lab_http_* by name pattern: 10% errors fires, Processing at 0 does not
+  - interval: 1m
+    input_series:
+      - series: 'quality_lab_http_requests_total{service="quality-lab-service", environment="staging", method="GET", endpoint="/api/x", status="200"}'
+        values: '0+90x15'
+      - series: 'quality_lab_http_requests_total{service="quality-lab-service", environment="staging", method="GET", endpoint="/api/x", status="500"}'
+        values: '0+10x15'
+      - series: 'quality_lab_http_request_errors_total{service="quality-lab-service", environment="staging", method="GET", endpoint="/api/x", status="500"}'
+        values: '0+10x15'
+      - series: 'processing_http_requests_total{service="processing-service", environment="staging"}'
+        values: '0+100x15'
+      - series: 'processing_http_request_errors_total{service="processing-service", environment="staging"}'
+        values: '0+0x15'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: HighErrorRate
+        exp_alerts:
+          - exp_labels: {severity: warning, service: quality-lab-service, environment: staging}
+            exp_annotations:
+              summary: "quality-lab-service is failing more than 5% of requests"
+              description: "Over the last five minutes more than 5% of requests to quality-lab-service returned an error. Check the service's logs in Loki for the same window."
+    promql_expr_test:
+      # dashboard queries, as provisioned
+      - expr: sum by (service) (rate({__name__=~".+_http_requests_total", service=~".*"}[5m]))
+        eval_time: 12m
+        exp_samples:
+          - labels: '{service="quality-lab-service"}'
+            value: 1.6666666666666667
+          - labels: '{service="processing-service"}'
+            value: 1.6666666666666667
+      - expr: 100 * sum by (service) (rate({__name__=~".+_http_request_errors_total", service=~".*"}[5m])) / clamp_min(sum by (service) (rate({__name__=~".+_http_requests_total", service=~".*"}[5m])), 0.001)
+        eval_time: 12m
+        exp_samples:
+          - labels: '{service="quality-lab-service"}'
+            value: 9.999999999999998
+          - labels: '{service="processing-service"}'
+            value: 0
+
+  # Lab determinations panel
+  - interval: 1m
+    input_series:
+      - series: 'quality_lab_determinations_total{service="quality-lab-service", result="pass"}'
+        values: '0 0 1 2 3 4'
+      - series: 'quality_lab_determinations_total{service="quality-lab-service", result="fail"}'
+        values: '0 0 0 1 1 1'
+    promql_expr_test:
+      - expr: sum by (result) (increase(quality_lab_determinations_total[5m]))
+        eval_time: 5m
+        exp_samples:
+          - labels: '{result="pass"}'
+            value: 4
+          - labels: '{result="fail"}'
+            value: 1

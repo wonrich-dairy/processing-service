@@ -9,13 +9,16 @@ groups:
       # The one rule that works today regardless of what the services expose: `up` is synthesised
       # by Prometheus itself from whether the scrape succeeded, so it needs nothing from the
       # application. A service that stops answering is the failure worth catching first.
+      #
+      # Matched on the `service` label, not a list of jobs (SCRUM-111): a new service is covered the
+      # moment it has a scrape job, with no edit here.
       - alert: ServiceDown
-        expr: up{job=~"processing-service|intake-service|auth-service"} == 0
+        expr: up{service!="prometheus"} == 0
         for: 2m
         labels:
           severity: critical
         annotations:
-          summary: "{{ $labels.service }} is not responding to scrapes"
+          summary: "{{ $labels.service }} ({{ $labels.environment }}) is not responding to scrapes"
           description: >-
             Prometheus has failed to scrape {{ $labels.service }} at {{ $labels.instance }} for two
             minutes. Either the service is down, or it is up but no longer serving /metrics.
@@ -25,14 +28,15 @@ groups:
 
   - name: wonrich-errors
     rules:
-      # Depends on the service exporting real request metrics. While /metrics returns placeholder
-      # zeros this rule can never fire - it is here so the threshold is agreed and reviewed now,
-      # not invented during an incident.
+      # Covers every service following the <service>_http_* naming convention (processing_http_*,
+      # quality_lab_http_*) by metric-name pattern, not one expression per service (SCRUM-111).
+      # Fires only for services exporting real request metrics: Processing Service's /metrics
+      # still returns placeholder zeros (see docs/observability.md).
       - alert: HighErrorRate
         expr: >-
-          sum by (service) (rate(processing_http_request_errors_total[5m]))
+          sum by (service, environment) (rate({__name__=~".+_http_request_errors_total"}[5m]))
           /
-          sum by (service) (rate(processing_http_requests_total[5m])) > 0.05
+          sum by (service, environment) (rate({__name__=~".+_http_requests_total"}[5m])) > 0.05
         for: 5m
         labels:
           severity: warning

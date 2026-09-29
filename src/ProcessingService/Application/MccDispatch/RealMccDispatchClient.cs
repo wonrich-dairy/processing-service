@@ -6,7 +6,7 @@ namespace ProcessingService.Application.MccDispatch;
 /// <summary>
 /// Real MCC dispatch client - reads from processingdb.mcc_dispatch_traces for true isolate (cached via polling).
 /// Supports PARTIAL UNLOAD: one dispatch split across multiple tanks via ProcessingRunStoringAllocation while keeping DispatchNumber UNIQUE.
-/// Filters out fully unloaded dispatches (Remaining <=0.01) from dropdown.
+/// Filters out fully unloaded dispatches (Remaining 0.01 or less) from dropdown.
 /// </summary>
 public sealed class RealMccDispatchClient : IMccDispatchClient
 {

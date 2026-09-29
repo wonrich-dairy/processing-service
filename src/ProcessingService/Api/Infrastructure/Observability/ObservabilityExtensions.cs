@@ -1,5 +1,7 @@
 using System.Diagnostics.Metrics;
 using System.Text;
+using Microsoft.EntityFrameworkCore;
+using ProcessingService.Infrastructure.Persistence;
 
 namespace ProcessingService.Api.Infrastructure.Observability;
 
@@ -10,6 +12,7 @@ namespace ProcessingService.Api.Infrastructure.Observability;
 /// - Prometheus /metrics endpoint
 /// - Request count/duration/error per endpoint
 /// - Custom metrics: allocations, stages, holds
+/// - Outbox backlog gauge (Pending/Poisoned) for Grafana, SCRUM-111 (review fix #11)
 /// - No PII/connection strings in logs
 /// </summary>
 public static class ObservabilityExtensions
@@ -46,7 +49,7 @@ public static class ObservabilityExtensions
     public static IEndpointRouteBuilder MapProcessingMetrics(this IEndpointRouteBuilder endpoints)
     {
         // Prometheus exposition format - /metrics endpoint (SCRUM-90 AC)
-        endpoints.MapGet("/metrics", async (HttpContext context, IMeterFactory meterFactory, ProcessingMetrics metrics) =>
+        endpoints.MapGet("/metrics", async (HttpContext context, IServiceScopeFactory scopeFactory, IMeterFactory meterFactory, ProcessingMetrics metrics) =>
         {
             context.Response.ContentType = "text/plain; version=0.0.4; charset=utf-8";
 
@@ -67,6 +70,8 @@ public static class ObservabilityExtensions
             sb.AppendLine("# TYPE processing_unloads_total counter");
             sb.AppendLine("# HELP processing_tanks_in_use Current tanks in use");
             sb.AppendLine("# TYPE processing_tanks_in_use gauge");
+            sb.AppendLine("# HELP processing_outbox_backlog Undispatched outbox rows awaiting Kafka publish (SCRUM-68; review fix #11) - Pending sustained growth means broker outage or relay down, Poisoned above zero needs human review. Grafana hook for SCRUM-111");
+            sb.AppendLine("# TYPE processing_outbox_backlog gauge");
 
             // In real implementation, use MeterListener to collect actual values
             // For scaffold, return static exposition with help text + current timestamp to prove endpoint works
@@ -77,6 +82,27 @@ public static class ObservabilityExtensions
             sb.AppendLine("processing_holds_total 0");
             sb.AppendLine("processing_unloads_total 0");
             sb.AppendLine("processing_tanks_in_use 0");
+
+            // Outbox backlog: REAL gauge queried at scrape time (review fix #11)
+            // Plain COUNT under InnoDB consistent read does not block on the relay's FOR UPDATE SKIP LOCKED claim locks (MVCC snapshot)
+            try
+            {
+                using var scope = scopeFactory.CreateScope();
+                var db = scope.ServiceProvider.GetRequiredService<ProcessingDbContext>();
+                var counts = await db.OutboxMessages
+                    .GroupBy(m => m.Status)
+                    .Select(g => new { Status = g.Key, Count = g.Count() })
+                    .ToListAsync(context.RequestAborted);
+                var pending = counts.FirstOrDefault(c => c.Status == "Pending")?.Count ?? 0;
+                var poisoned = counts.FirstOrDefault(c => c.Status == "Poisoned")?.Count ?? 0;
+                sb.AppendLine($"processing_outbox_backlog{{status=\"Pending\"}} {pending}");
+                sb.AppendLine($"processing_outbox_backlog{{status=\"Poisoned\"}} {poisoned}");
+            }
+            catch
+            {
+                // DB unreachable or migration pending - never fail the whole scrape, just omit the samples (Prometheus shows a gap)
+                sb.AppendLine("# outbox backlog unavailable (database unreachable or migration pending)");
+            }
 
             await context.Response.WriteAsync(sb.ToString());
         }).AllowAnonymous().WithDisplayName("Prometheus Metrics");

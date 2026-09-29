@@ -11,7 +11,7 @@ namespace ProcessingService.Infrastructure.Persistence;
 public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<ProcessingDbContext>
 {
     private const string DesignTimeConnectionString =
-        "Server=your-remote-mysql-host;Port=3306;Database=processingdb;User Id=user_id;Password=your-secure-password;SslMode=Required";
+        "Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=mccadmin;Password=mccAdmin@123;SslMode=Required";
 
     public ProcessingDbContext CreateDbContext(string[] args)
     {

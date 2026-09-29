@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using ProcessingService.Domain.Entities;
+using ProcessingService.Domain.Events;
 using ProcessingService.Infrastructure.Persistence;
+using ProcessingService.Application.Outbox;
 
 namespace ProcessingService.Application.Stages;
 
@@ -8,11 +10,13 @@ public sealed class ProcessingStageService : IProcessingStageService
 {
     private readonly ProcessingDbContext _db;
     private readonly TimeProvider _time;
+    private readonly IOutboxWriter _outbox;
 
-    public ProcessingStageService(ProcessingDbContext db, TimeProvider time)
+    public ProcessingStageService(ProcessingDbContext db, TimeProvider time, IOutboxWriter outbox)
     {
         _db = db;
         _time = time;
+        _outbox = outbox;
     }
 
     public async Task<ProcessingStage> StartAsync(StartStageRequest request, string userId, CancellationToken ct)
@@ -43,6 +47,7 @@ public sealed class ProcessingStageService : IProcessingStageService
         }
 
         var now = _time.GetUtcNow().UtcDateTime;
+        var correlationId = Guid.NewGuid().ToString();
 
         var stage = new ProcessingStage
         {
@@ -58,13 +63,49 @@ public sealed class ProcessingStageService : IProcessingStageService
         };
 
         _db.ProcessingStages.Add(stage);
+
+        // SCRUM-68: Publish ProcessingStageRecorded on start (with deviation false initially)
+        var processingRun = await _db.ProcessingRuns.FirstOrDefaultAsync(r => r.Id == request.ProcessingRunId, ct);
+        var allocation = await _db.TankAllocations
+            .Where(a => a.ProcessingRunId == request.ProcessingRunId && a.DestinationMixingTankId == request.MixingTankId)
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
+        var batchId = allocation?.BatchCode ?? processingRun?.BatchCode ?? processingRun?.DispatchNumber ?? "unknown";
+        var dispatchNumber = processingRun?.DispatchNumber ?? "unknown";
+
+        var stageEvent = new ProcessingStageRecordedEvent
+        {
+            BatchId = batchId,
+            DispatchNumber = dispatchNumber,
+            TimestampUtc = now,
+            IsDeviation = false,
+            CorrelationId = correlationId,
+            MixingTankId = tank.Id.ToString(),
+            MixingTankCode = tank.Code,
+            StageType = request.StageType.ToString(),
+            StartTimeUtc = now,
+            EndTimeUtc = null,
+            EndTemperatureC = 0,
+            DurationMinutes = null,
+            CultureAdded = false,
+            RecordedBy = userId
+        };
+
+        await _outbox.WriteAsync(
+            topic: "wonrich.processing.stage-events.v1",
+            key: batchId,
+            @event: stageEvent,
+            correlationId: correlationId,
+            cancellationToken: ct);
+
         await _db.SaveChangesAsync(ct);
         return stage;
     }
 
     public async Task<ProcessingStage> EndAsync(Guid stageId, EndStageRequest request, string userId, CancellationToken ct)
     {
-        var stage = await _db.ProcessingStages.Include(s => s.MixingTank).FirstOrDefaultAsync(s => s.Id == stageId, ct);
+        var stage = await _db.ProcessingStages.Include(s => s.MixingTank).Include(s => s.ProcessingRun).FirstOrDefaultAsync(s => s.Id == stageId, ct);
         if (stage == null) throw new ArgumentException("Stage not found");
         if (stage.EndTimeUtc != null) throw new InvalidOperationException("Stage already ended");
 
@@ -81,8 +122,81 @@ public sealed class ProcessingStageService : IProcessingStageService
         stage.CultureAdded = request.CultureAdded;
         if (request.CultureAdded) stage.CultureAddedAtUtc = now;
 
-        // If Cooling ended, mark tank empty? No, cooling sends to final storage, but for now keep RemainingKg
-        // If user wants to free MT after pasteuriser, they can do via separate endpoint later
+        var correlationId = Guid.NewGuid().ToString();
+
+        // Get batch info for event
+        var allocation = await _db.TankAllocations
+            .Where(a => a.ProcessingRunId == stage.ProcessingRunId && a.DestinationMixingTankId == stage.MixingTankId)
+            .OrderByDescending(a => a.CreatedAtUtc)
+            .FirstOrDefaultAsync(ct);
+
+        var batchId = allocation?.BatchCode ?? stage.ProcessingRun?.BatchCode ?? stage.ProcessingRun?.DispatchNumber ?? "unknown";
+        var dispatchNumber = stage.ProcessingRun?.DispatchNumber ?? "unknown";
+
+        // SCRUM-68: Publish ProcessingStageRecorded per stage, carrying stage type, temperature, timings and deviation flag
+        var stageRecordedEvent = new ProcessingStageRecordedEvent
+        {
+            BatchId = batchId,
+            DispatchNumber = dispatchNumber,
+            TimestampUtc = now,
+            IsDeviation = isDeviation,
+            CorrelationId = correlationId,
+            MixingTankId = stage.MixingTank.Id.ToString(),
+            MixingTankCode = stage.MixingTank.Code,
+            StageType = stage.StageType.ToString(),
+            StartTimeUtc = stage.StartTimeUtc,
+            EndTimeUtc = now,
+            EndTemperatureC = request.EndTemperatureC,
+            DurationMinutes = stage.DurationMinutes,
+            CultureAdded = request.CultureAdded,
+            CultureAddedAtUtc = request.CultureAdded ? now : null,
+            RecordedBy = userId
+        };
+
+        await _outbox.WriteAsync(
+            topic: "wonrich.processing.stage-events.v1",
+            key: batchId,
+            @event: stageRecordedEvent,
+            correlationId: correlationId,
+            cancellationToken: ct);
+
+        // SCRUM-68: ProcessingCompleted published when a run closes (Cooling ended)
+        if (stage.StageType == StageType.Cooling)
+        {
+            var allStages = await _db.ProcessingStages
+                .Where(s => s.MixingTankId == stage.MixingTankId && s.ProcessingRunId == stage.ProcessingRunId)
+                .ToListAsync(ct);
+
+            var hasDeviation = allStages.Any(s => s.IsDeviation) || isDeviation;
+            var firstStage = allStages.OrderBy(s => s.StartTimeUtc).FirstOrDefault();
+            var totalDuration = firstStage != null ? (int)(now - firstStage.StartTimeUtc).TotalMinutes : stage.DurationMinutes ?? 0;
+
+            var completedEvent = new ProcessingCompletedEvent
+            {
+                BatchId = batchId,
+                DispatchNumber = dispatchNumber,
+                TimestampUtc = now,
+                IsDeviation = hasDeviation,
+                CorrelationId = Guid.NewGuid().ToString(),
+                MixingTankId = stage.MixingTank.Id.ToString(),
+                MixingTankCode = stage.MixingTank.Code,
+                CompletedAtUtc = now,
+                TotalDurationMinutes = totalDuration,
+                HasDeviation = hasDeviation,
+                CompletedBy = userId
+            };
+
+            await _outbox.WriteAsync(
+                topic: "wonrich.processing.stage-events.v1",
+                key: batchId,
+                @event: completedEvent,
+                correlationId: completedEvent.CorrelationId,
+                cancellationToken: ct);
+
+            // Optionally free mixing tank? For now keep RemainingKg, but mark as completed - dashboard will show no active batch if needed
+            // Real process: after Cooling, batch goes to final storage, MT becomes empty
+            // For traceability, we keep it but event signals completion
+        }
 
         await _db.SaveChangesAsync(ct);
         return stage;

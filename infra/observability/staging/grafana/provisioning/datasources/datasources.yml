@@ -1,0 +1,16 @@
+# Staging Grafana data sources (SCRUM-111). Prometheus only: staging has no Loki, because App
+# Service container logs are not reachable from the VM. The same uid as local, so the shared
+# dashboard works unchanged; its Logs panel shows "data source not found" on staging.
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    uid: wonrich-prometheus
+    jsonData:
+      timeInterval: 15s
+    editable: false

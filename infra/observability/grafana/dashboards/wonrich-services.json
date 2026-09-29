@@ -1,11 +1,11 @@
 {
   "uid": "wonrich-services",
   "title": "Wonrich — Service Overview",
-  "description": "Request rate, error rate and response time per service, plus availability and logs (SCRUM-89). Provisioned from infra/observability/grafana/dashboards; edit the file, not the UI.",
-  "tags": ["wonrich", "scrum-89"],
+  "description": "Request rate, error rate and response time per service, lab determinations, plus availability and logs (SCRUM-89, SCRUM-111). Request panels match any service exporting <service>_http_* metrics. Provisioned from infra/observability/grafana/dashboards; edit the file, not the UI.",
+  "tags": ["wonrich", "scrum-89", "scrum-111"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-1h", "to": "now" },
   "templating": {
@@ -66,7 +66,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by (service) (rate(processing_http_requests_total{service=~\"$service\"}[5m]))",
+          "expr": "sum by (service) (rate({__name__=~\".+_http_requests_total\", service=~\"$service\"}[5m]))",
           "legendFormat": "{{service}}"
         }
       ],
@@ -90,7 +90,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "100 * sum by (service) (rate(processing_http_request_errors_total{service=~\"$service\"}[5m])) / clamp_min(sum by (service) (rate(processing_http_requests_total{service=~\"$service\"}[5m])), 0.001)",
+          "expr": "100 * sum by (service) (rate({__name__=~\".+_http_request_errors_total\", service=~\"$service\"}[5m])) / clamp_min(sum by (service) (rate({__name__=~\".+_http_requests_total\", service=~\"$service\"}[5m])), 0.001)",
           "legendFormat": "{{service}}"
         }
       ],
@@ -116,17 +116,17 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (service, le) (rate(processing_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "expr": "histogram_quantile(0.50, sum by (service, le) (rate({__name__=~\".+_http_request_duration_seconds_bucket\", service=~\"$service\"}[5m])))",
           "legendFormat": "{{service}} p50"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(processing_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate({__name__=~\".+_http_request_duration_seconds_bucket\", service=~\"$service\"}[5m])))",
           "legendFormat": "{{service}} p95"
         },
         {
           "refId": "C",
-          "expr": "histogram_quantile(0.99, sum by (service, le) (rate(processing_http_request_duration_seconds_bucket{service=~\"$service\"}[5m])))",
+          "expr": "histogram_quantile(0.99, sum by (service, le) (rate({__name__=~\".+_http_request_duration_seconds_bucket\", service=~\"$service\"}[5m])))",
           "legendFormat": "{{service}} p99"
         }
       ],
@@ -141,12 +141,70 @@
       "options": { "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
     },
     {
+      "id": 6,
+      "type": "stat",
+      "title": "Lab determinations (pass / fail)",
+      "description": "Final lab determinations by Quality Lab Service over the selected time range: pass = batch cleared, fail = batch failed (SCRUM-111). Reads 0 until determinations are recorded.",
+      "datasource": { "type": "prometheus", "uid": "wonrich-prometheus" },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 22 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (result) (increase(quality_lab_determinations_total[$__range]))",
+          "legendFormat": "{{result}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0, "min": 0, "color": { "mode": "fixed", "fixedColor": "text" } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "pass" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] },
+          { "matcher": { "id": "byName", "options": "fail" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] }
+        ]
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "orientation": "horizontal",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Stage events received by Quality Lab",
+      "description": "Processing stage events arriving at Quality Lab Service over Kafka, by event type (SCRUM-111). Flat while Processing publishes nothing.",
+      "datasource": { "type": "prometheus", "uid": "wonrich-prometheus" },
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 22 },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (event_type) (increase(quality_lab_stage_events_received_total[5m]))",
+          "legendFormat": "{{event_type}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "lineWidth": 2, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
       "id": 5,
       "type": "logs",
       "title": "Logs",
       "description": "Container logs from Loki for the selected services. Filter further with the query bar; log lines carry CorrelationId, which ties a log to the request that produced it.",
       "datasource": { "type": "loki", "uid": "wonrich-loki" },
-      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 22 },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 30 },
       "targets": [
         {
           "refId": "A",

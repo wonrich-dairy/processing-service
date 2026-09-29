@@ -61,14 +61,38 @@ builder.Services.AddScoped<ProcessingService.Application.ProcessingRuns.IProcess
 // Future upgrade: replace with Kafka consumer mcc.dispatch_created
 builder.Services.AddHostedService<ProcessingService.Application.MccDispatch.MccDispatchSyncService>();
 
-// Allocation storing->mixing with batch code [day]-[product]-[letter] per real process, no Kafka this sprint
+// SCRUM-68: Outbox pattern - shared client library mechanism under SCRUM-58, consumed correctly here
+// Write event to outbox table in same transaction as record, then relay to Kafka separately
+// Ensures publish-after-commit, rollback produces no event, broker outage does not fail DB write
+builder.Services.AddScoped<ProcessingService.Application.Outbox.IOutboxWriter, ProcessingService.Application.Outbox.OutboxWriter>();
+
+// SCRUM-68: Kafka producer - publishes events to wonrich.processing.stage-events.v1 and hold-events.v1
+// Contracts versioned in shared library (Domain.Events), correlation ID in headers traceable in Loki
+var kafkaBootstrap = builder.Configuration["Kafka:BootstrapServers"] ?? builder.Configuration["Kafka__BootstrapServers"];
+if (!string.IsNullOrWhiteSpace(kafkaBootstrap))
+{
+    builder.Services.AddSingleton<ProcessingService.Application.Kafka.IKafkaProducer, ProcessingService.Application.Kafka.KafkaProducer>();
+}
+else
+{
+    // No Kafka configured - NoOp producer: DB writes still succeed, outbox rows stay PENDING until Kafka is configured (never marked sent)
+    builder.Services.AddSingleton<ProcessingService.Application.Kafka.IKafkaProducer, ProcessingService.Application.Kafka.NoOpKafkaProducer>();
+}
+
+// Outbox relay - polls outbox_messages every 5s, publishes to Kafka, retries then marks Poisoned
+builder.Services.AddHostedService<ProcessingService.Application.Kafka.OutboxRelayService>();
+
+// Outbox cleanup - daily delete of Processed rows past retention so outbox_messages does not grow forever (Poisoned rows kept for human review)
+builder.Services.AddHostedService<ProcessingService.Application.Kafka.OutboxCleanupService>();
+
+// Allocation storing->mixing with batch code [day]-[product]-[letter] per real process, now with Kafka outbox per SCRUM-68
 builder.Services.AddScoped<ProcessingService.Application.Allocations.ITankAllocationService, ProcessingService.Application.Allocations.TankAllocationService>();
 
-// Processing stages Heating -> Homogeniser -> Pasteuriser -> Cooling per SCRUM-65/66
+// Processing stages Heating -> Homogeniser -> Pasteuriser -> Cooling per SCRUM-65/66, now with Kafka outbox per SCRUM-68
 builder.Services.AddScoped<ProcessingService.Application.Stages.IProcessingStageService, ProcessingService.Application.Stages.ProcessingStageService>();
 
 // Quality test mock - abstraction for real quality service later (SCRUM-62/63) + real process cascade 80->75->68->COB
-// Mock now, real later via RealQualityTestClient - no change in callers
+// Now with Kafka outbox for hold events per SCRUM-68
 builder.Services.AddScoped<ProcessingService.Application.QualityTests.IQualityTestMockClient, ProcessingService.Application.QualityTests.MockQualityTestClient>();
 builder.Services.AddScoped<ProcessingService.Application.QualityTests.IQualityTestClient>(sp => sp.GetRequiredService<ProcessingService.Application.QualityTests.IQualityTestMockClient>());
 
@@ -78,7 +102,7 @@ builder.Services.AddProcessingObservability(builder.Configuration);
 // Health + ProblemDetails + Swagger (SCRUM-77: own Swagger UI, auth reflected, XML comments, disabled in prod)
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<DomainExceptionHandler>();
-builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database");
+builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("database").AddCheck<KafkaConfigHealthCheck>("kafka");
 builder.Services.AddProcessingSwagger();
 
 var app = builder.Build();

@@ -1,7 +1,9 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ProcessingService.Domain.Entities;
+using ProcessingService.Domain.Events;
 using ProcessingService.Infrastructure.Persistence;
+using ProcessingService.Application.Outbox;
 
 namespace ProcessingService.Application.QualityTests;
 
@@ -19,11 +21,13 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
 {
     private readonly ProcessingDbContext _db;
     private readonly TimeProvider _time;
+    private readonly IOutboxWriter _outbox;
 
-    public MockQualityTestClient(ProcessingDbContext db, TimeProvider time)
+    public MockQualityTestClient(ProcessingDbContext db, TimeProvider time, IOutboxWriter outbox)
     {
         _db = db;
         _time = time;
+        _outbox = outbox;
     }
 
     public async Task<QualityTestStatus> GetStatusAsync(string dispatchNumber, CancellationToken cancellationToken)
@@ -154,6 +158,9 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
 
         _db.QualityPanels.Add(panel);
 
+        // Check if previously on hold for hold resolved detection
+        var wasOnHold = runs.Any(r => r.State == ProcessingRunState.OnHold);
+
         // Update ALL runs with same dispatch (partial unload support)
         foreach (var run in runs)
         {
@@ -172,6 +179,63 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
                     : "Failed quality test";
             }
             run.UpdatedAtUtc = now;
+        }
+
+        // SCRUM-68: Publish ProcessingHoldRaised and ProcessingHoldResolved via outbox in same transaction
+        var correlationId = Guid.NewGuid().ToString();
+        var batchId = runs.First().BatchCode ?? dispatchNumber; // Use dispatch as batchId if not yet allocated
+
+        if (verdictResult.Verdict == "Reject")
+        {
+            // Hold raised
+            var holdRaised = new ProcessingHoldRaisedEvent
+            {
+                BatchId = batchId,
+                DispatchNumber = dispatchNumber,
+                TimestampUtc = now,
+                IsDeviation = true,
+                CorrelationId = correlationId,
+                HoldId = firstRun.Id.ToString(),
+                Reason = verdictResult.FailedParameter != null
+                    ? $"Failed: {verdictResult.FailedParameter} {verdictResult.FailedValue}"
+                    : "Failed quality test",
+                RaisedAtUtc = now,
+                RaisedBy = userId,
+                FailedParameter = verdictResult.FailedParameter,
+                FailedValue = verdictResult.FailedValue
+            };
+
+            await _outbox.WriteAsync(
+                topic: "wonrich.processing.hold-events.v1",
+                key: batchId,
+                @event: holdRaised,
+                correlationId: correlationId,
+                cancellationToken: cancellationToken);
+        }
+        else if (wasOnHold)
+        {
+            // Hold resolved - previously on hold, now passed on retest
+            var holdResolved = new ProcessingHoldResolvedEvent
+            {
+                BatchId = batchId,
+                DispatchNumber = dispatchNumber,
+                TimestampUtc = now,
+                IsDeviation = false,
+                CorrelationId = correlationId,
+                HoldId = firstRun.Id.ToString(),
+                Reason = "Previous hold",
+                Resolution = "Retest passed - quality Accept",
+                RaisedAtUtc = runs.First().CreatedAtUtc, // approximate
+                ResolvedAtUtc = now,
+                ResolvedBy = userId
+            };
+
+            await _outbox.WriteAsync(
+                topic: "wonrich.processing.hold-events.v1",
+                key: batchId,
+                @event: holdResolved,
+                correlationId: correlationId,
+                cancellationToken: cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

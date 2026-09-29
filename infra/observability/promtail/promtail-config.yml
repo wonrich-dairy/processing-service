@@ -42,6 +42,11 @@ scrape_configs:
       - target_label: job
         replacement: docker
 
+      # Same environment label the metrics carry (SCRUM-111). This Promtail only runs locally;
+      # staging logs stay in App Service's log stream.
+      - target_label: environment
+        replacement: local
+
       # Do not ship the observability stack's own logs into itself. Loki logging about ingesting
       # Loki logs is a loop that only stops when the disk does.
       - source_labels: ['__meta_docker_container_label_com_docker_compose_service']

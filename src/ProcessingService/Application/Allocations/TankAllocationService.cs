@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using ProcessingService.Domain.Entities;
+using ProcessingService.Domain.Events;
 using ProcessingService.Infrastructure.Persistence;
 using ProcessingService.Api.Infrastructure.Observability;
+using ProcessingService.Application.Outbox;
 
 namespace ProcessingService.Application.Allocations;
 
@@ -10,19 +12,21 @@ namespace ProcessingService.Application.Allocations;
 /// Batch code [dayNumber]-[productCode]-[batchLetter] e.g., 1-SY-A, 258-FM-A, 258-DY-A
 /// DayNumber = DayOfYear 1-365, ProductCode = SY,SK,FM,FLM,DY (was DK fixed), BatchLetter = A-Z per product per day concurrency-safe
 /// Product line pre-selected from alcohol result: Passed 80% -> FM,FLM Fresh/Flavoured, Passed 75%/68%/COB -> SY,SK,DY Yogurt
-/// No Kafka this sprint - direct DB writes, abstraction ready for next sprint
+/// SCRUM-68: Publishes MilkAllocatedToMixingTank via outbox after commit, broker outage does not fail DB write
 /// </summary>
 public sealed class TankAllocationService : ITankAllocationService
 {
     private readonly ProcessingDbContext _db;
     private readonly ProcessingMetrics _metrics;
     private readonly TimeProvider _time;
+    private readonly IOutboxWriter _outbox;
 
-    public TankAllocationService(ProcessingDbContext db, ProcessingMetrics metrics, TimeProvider time)
+    public TankAllocationService(ProcessingDbContext db, ProcessingMetrics metrics, TimeProvider time, IOutboxWriter outbox)
     {
         _db = db;
         _metrics = metrics;
         _time = time;
+        _outbox = outbox;
     }
 
     public async Task<TankAllocation> AllocateAsync(CreateAllocationRequest request, string userId, CancellationToken cancellationToken)
@@ -127,6 +131,7 @@ public sealed class TankAllocationService : ITankAllocationService
         TankAllocation allocation;
         var maxRetries = 5;
         var retry = 0;
+        var correlationId = Guid.NewGuid().ToString(); // For tracing across hop in Loki
 
         while (true)
         {
@@ -161,14 +166,49 @@ public sealed class TankAllocationService : ITankAllocationService
             destTank.UpdatedAtUtc = now;
             destTank.UpdatedBy = userId;
 
+            // SCRUM-68: Write MilkAllocatedToMixingTank event to outbox in SAME transaction as allocation
+            // Ensures publish-after-commit: if transaction rolls back, no event published
+            // Broker outage does not fail DB write - relay retries separately
+            var allocatedEvent = new MilkAllocatedToMixingTankEvent
+            {
+                BatchId = batchCode,
+                DispatchNumber = processingRun.DispatchNumber,
+                TimestampUtc = now,
+                IsDeviation = false,
+                CorrelationId = correlationId,
+                SourceStoringTankId = sourceTank.Id.ToString(),
+                SourceStoringTankCode = sourceTank.Code,
+                DestinationMixingTankId = destTank.Id.ToString(),
+                DestinationMixingTankCode = destTank.Code,
+                QuantityKg = Math.Round(request.QuantityKg, 2),
+                ProductType = request.ProductType.ToString(),
+                BatchCode = batchCode,
+                BatchNumber = batchNumber,
+                BatchLetter = batchLetter,
+                AllocatedAtUtc = now,
+                AllocatedBy = userId,
+                OverrideReason = isOverride ? request.OverrideReason : null
+            };
+
+            await _outbox.WriteAsync(
+                topic: "wonrich.processing.stage-events.v1",
+                key: batchCode, // Message key = batchId for ordering per key
+                @event: allocatedEvent,
+                correlationId: correlationId,
+                cancellationToken: cancellationToken);
+
             try
             {
                 await _db.SaveChangesAsync(cancellationToken);
-                break; // Success
+                break; // Success - both allocation and outbox committed, relay will publish after commit
             }
             catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("ux_tank_allocations_batchcode") == true || ex.InnerException?.Message.Contains("ux_tank_allocations_day_product_letter") == true)
             {
                 // Concurrency: batch letter already taken by another tech, retry with next letter
+                // Detach both allocation and outbox message (last added is outbox)
+                var outboxEntry = _db.ChangeTracker.Entries<OutboxMessage>().LastOrDefault();
+                if (outboxEntry != null)
+                    outboxEntry.State = EntityState.Detached;
                 _db.Entry(allocation).State = EntityState.Detached;
                 sourceTank.RemainingKg += request.QuantityKg; // rollback in memory
                 destTank.RemainingKg -= request.QuantityKg;

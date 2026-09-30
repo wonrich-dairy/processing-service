@@ -72,7 +72,8 @@ public sealed class OutboxTests
             CreatedAtUtc = DateTime.UtcNow,
             UpdatedAtUtc = DateTime.UtcNow,
             CreatedBy = "test",
-            UpdatedBy = "test"
+            UpdatedBy = "test",
+            RowVersion = new byte[8]
         };
         db.Tanks.Add(tank);
         await db.SaveChangesAsync();

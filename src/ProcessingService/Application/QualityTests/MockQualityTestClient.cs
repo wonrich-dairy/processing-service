@@ -60,18 +60,18 @@ public sealed class MockQualityTestClient : IQualityTestMockClient
         if (runs.Count == 0)
             throw new InvalidOperationException($"Dispatch '{dispatchNumber}' not found. Unload must be recorded first.");
 
-        var firstPending = runs.FirstOrDefault(r => r.QualityTestStatus == QualityTestStatus.Pending);
-        if (firstPending == null && runs.Any(r => r.QualityTestStatus != QualityTestStatus.Pending))
+        // A Failed run (on hold) may be re-tested; that is how a hold gets resolved.
+        var canStart = runs.Any(r => r.QualityTestStatus == QualityTestStatus.Pending || r.QualityTestStatus == QualityTestStatus.Failed);
+        if (!canStart)
         {
             var existingStatus = runs.First().QualityTestStatus;
-            if (existingStatus != QualityTestStatus.Pending)
-                throw new InvalidOperationException($"Dispatch '{dispatchNumber}' already in {existingStatus} state. Cannot start again.");
+            throw new InvalidOperationException($"Dispatch '{dispatchNumber}' already in {existingStatus} state. Cannot start again.");
         }
 
         var now = _time.GetUtcNow().UtcDateTime;
         foreach (var run in runs)
         {
-            if (run.QualityTestStatus == QualityTestStatus.Pending)
+            if (run.QualityTestStatus == QualityTestStatus.Pending || run.QualityTestStatus == QualityTestStatus.Failed)
             {
                 run.QualityTestStatus = QualityTestStatus.InProgress;
                 run.UpdatedAtUtc = now;

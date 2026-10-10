@@ -45,3 +45,51 @@ groups:
           description: >-
             Over the last five minutes more than 5% of requests to {{ $labels.service }} returned
             an error. Check the service's logs in Loki for the same window.
+
+  # Event-pipeline health (SCRUM-127). The metrics come from kafka-exporter, which reads consumer-group
+  # lag and topic offsets from the broker, and from Traceability Service itself. They exist on the
+  # staging and production stacks; the local stack has no exporter, so these rules stay quiet there.
+  - name: wonrich-event-pipeline
+    rules:
+      # quality-lab-observability is a passive listener that never commits offsets, so its lag only
+      # ever grows and would alert forever. It is left out on purpose.
+      - alert: ConsumerLagHigh
+        expr: >-
+          sum by (consumergroup, environment) (kafka_consumergroup_lag{consumergroup!="quality-lab-observability"}) > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Consumer group {{ $labels.consumergroup }} ({{ $labels.environment }}) is falling behind"
+          description: >-
+            {{ $labels.consumergroup }} has had more than 100 messages waiting for five minutes. The
+            consumer is down, stuck, or slower than the producers. Look at its logs and at the lag panel.
+
+      # The offset of a dead-letter topic is how many messages it has ever received, so any increase
+      # means a consumer gave up on a message and a person has to look at it.
+      - alert: DeadLetterReceived
+        expr: >-
+          sum by (topic, environment) (increase(kafka_topic_partition_current_offset{topic=~"wonrich[.]dlq[.].+"}[10m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A message landed in {{ $labels.topic }} ({{ $labels.environment }})"
+          description: >-
+            A consumer could not process a message in the last ten minutes and parked it on
+            {{ $labels.topic }}. Read it from the topic, fix the cause, and replay it.
+
+      # Stale means the newest projected event is more than 15 minutes old while messages are still
+      # waiting for the Traceability consumers: the read model is behind, not just quiet.
+      - alert: ProjectionStale
+        expr: >-
+          (time() - max by (environment) (traceability_newest_projected_event_timestamp_seconds)) > 900
+          and on (environment)
+          sum by (environment) (kafka_consumergroup_lag{consumergroup=~"traceability-.+"}) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Traceability's read model is stale ({{ $labels.environment }})"
+          description: >-
+            The newest event Traceability has projected is more than 15 minutes old, and its consumer
+            groups still have messages waiting. The dashboard no longer shows the factory floor as it is.

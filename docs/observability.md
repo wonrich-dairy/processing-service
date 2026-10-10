@@ -170,7 +170,8 @@ the UI.
 | `HighErrorRate` | over 5% of requests error for 5 minutes | **yes** for Quality Lab; not for Processing until its `/metrics` is real |
 
 Both select services by label and metric-name pattern, not by a list of jobs, so a new service is
-covered as soon as it has a scrape job (SCRUM-111). `alerts.test.yml` unit-tests both rules and the
+covered as soon as it has a scrape job (SCRUM-111). Three more rules watch the event pipeline
+(SCRUM-127, see [Event-pipeline health](#event-pipeline-health-scrum-127)). `alerts.test.yml` unit-tests both rules and the
 dashboard queries:
 
 ```bash
@@ -213,7 +214,20 @@ Azure. The VM is deleted after the final evaluation, and the stack with it.
 ```
 
 Each `service=host` becomes one scrape job. Re-run it to add a service or to ship changed alerts or
-dashboards; data and the Grafana password are kept.
+dashboards; data and the Grafana password are kept. Traceability is added the same way, with
+`traceability-service=<traceability app host>`.
+
+Production apps go after `--prod`. They are scraped with `environment="production"`, under a job named
+`<service>-prod`, and the dashboard's **Environment** switch separates them from staging:
+
+```bash
+./infra/observability/staging/deploy.sh wonrich-kafka.southeastasia.cloudapp.azure.com quality-lab-service=<host> traceability-service=<host> --prod traceability-service=<production host>
+```
+
+List every target on every run: the scrape config is regenerated from the arguments, so a service left
+out of the command disappears from Prometheus. The script copies the files with `tar --overwrite`, which
+rewrites them in place; Prometheus mounts its config and rules as single files, so a copy that replaces
+them leaves the running container reading the old ones until it is restarted.
 
 ### Opening it
 
@@ -232,6 +246,66 @@ ports differ from the local stack's 3000 / 9090 so both can be open at once.
   counts and latencies, no business data.
 - **Alerts show in Prometheus (`/alerts`) but notify nobody**: there is no Alertmanager, locally or on
   staging.
+
+## Event-pipeline health (SCRUM-127)
+
+Request metrics say whether a service answers. They do not say whether Traceability is keeping up with
+the factory floor, so the event pipeline is watched separately.
+
+**kafka-exporter** (`danielqsj/kafka-exporter`, in `infra/observability/staging/docker-compose.yml`) reads
+consumer-group lag and topic offsets from a broker and serves them to Prometheus. There is one per broker,
+each joined to that broker's Docker network and using its internal listener, so it needs no SASL credentials
+and publishes nothing:
+
+| Exporter | Broker | Prometheus job | `environment` |
+|---|---|---|---|
+| `wonrich-kafka-exporter` | staging, port 9094 | `kafka-exporter-staging` | `staging` |
+| `wonrich-kafka-exporter-prod` | production, port 9095 | `kafka-exporter-production` | `production` |
+
+Traceability Service adds three metrics of its own (`TraceabilityMetrics` in its repository):
+
+| Metric | Meaning |
+|---|---|
+| `traceability_events_consumed_total{topic}` | events projected, by source topic |
+| `traceability_events_dead_lettered_total{topic}` | events parked on a dead-letter topic |
+| `traceability_newest_projected_event_timestamp_seconds` | event time of the newest event in the store |
+
+### Alerts
+
+| Alert | Fires when | For |
+|---|---|---|
+| `ConsumerLagHigh` | a consumer group has more than 100 messages waiting | 5 minutes |
+| `DeadLetterReceived` | a dead-letter topic's offset rose in the last 10 minutes | immediately |
+| `ProjectionStale` | the newest projected event is over 15 minutes old while the Traceability groups still have messages waiting | 5 minutes |
+
+These are the starting values; tune them in `alerts.yml` through a pull request. `quality-lab-observability`
+is excluded from `ConsumerLagHigh`: that listener never commits offsets, so its lag only grows. The rules are
+unit-tested in `alerts.test.yml`, including the cases that must stay quiet.
+
+### Dashboard
+
+**Wonrich, Service Overview** has an **Environment** switch (staging, production) and a row
+**Traceability and event pipeline**:
+
+| Panel | Shows |
+|---|---|
+| Events consumed per second | `traceability_events_consumed_total`, by topic |
+| Consumer lag per group | `kafka_consumergroup_lag`, by group |
+| Messages per dead-letter topic | `kafka_topic_partition_current_offset` of the `wonrich.dlq.*` topics |
+| Projection latency | seconds since the newest projected event |
+
+### Proving an alert
+
+Send a clearly marked message to a dead-letter topic on the staging broker:
+
+```bash
+echo 'TEST:{"test":true}' | docker exec -i wonrich-kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server localhost:9092 --topic wonrich.dlq.traceability-stage-events.v1 --property parse.key=true --property key.separator=:
+```
+
+Within about 20 seconds `DeadLetterReceived` is **firing** at http://localhost:19090/alerts (through the SSH
+tunnel), and it clears ten minutes later.
+
+---
 
 ## Tracing a request across the Kafka hop
 

@@ -80,3 +80,72 @@ tests:
             value: 4
           - labels: '{result="fail"}'
             value: 1
+
+  # ConsumerLagHigh (SCRUM-127): a group over 100 messages for five minutes fires; a group under it
+  # does not, and the passive quality-lab-observability listener never does, however large its lag.
+  - interval: 1m
+    input_series:
+      - series: 'kafka_consumergroup_lag{consumergroup="traceability-stage-events", topic="wonrich.processing.stage-events.v1", partition="0", environment="staging"}'
+        values: '150x15'
+      - series: 'kafka_consumergroup_lag{consumergroup="traceability-hold-events", topic="wonrich.processing.hold-events.v1", partition="0", environment="staging"}'
+        values: '40x15'
+      - series: 'kafka_consumergroup_lag{consumergroup="quality-lab-observability", topic="wonrich.processing.stage-events.v1", partition="0", environment="staging"}'
+        values: '5000x15'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ConsumerLagHigh
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: ConsumerLagHigh
+        exp_alerts:
+          - exp_labels: {severity: warning, consumergroup: traceability-stage-events, environment: staging}
+            exp_annotations:
+              summary: "Consumer group traceability-stage-events (staging) is falling behind"
+              description: "traceability-stage-events has had more than 100 messages waiting for five minutes. The consumer is down, stuck, or slower than the producers. Look at its logs and at the lag panel."
+
+  # DeadLetterReceived (SCRUM-127): a dead-letter topic whose offset rose in the last ten minutes fires;
+  # one that did not move, and an ordinary event topic that did, do not.
+  - interval: 1m
+    input_series:
+      - series: 'kafka_topic_partition_current_offset{topic="wonrich.dlq.traceability-stage-events.v1", partition="0", environment="staging"}'
+        values: '4 4 4 4 5 5 5 5 5 5'
+      - series: 'kafka_topic_partition_current_offset{topic="wonrich.dlq.traceability-hold-events.v1", partition="0", environment="staging"}'
+        values: '2x9'
+      - series: 'kafka_topic_partition_current_offset{topic="wonrich.processing.stage-events.v1", partition="0", environment="staging"}'
+        values: '0+50x9'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: DeadLetterReceived
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: DeadLetterReceived
+        exp_alerts:
+          - exp_labels: {severity: warning, topic: wonrich.dlq.traceability-stage-events.v1, environment: staging}
+            exp_annotations:
+              summary: "A message landed in wonrich.dlq.traceability-stage-events.v1 (staging)"
+              description: "A consumer could not process a message in the last ten minutes and parked it on wonrich.dlq.traceability-stage-events.v1. Read it from the topic, fix the cause, and replay it."
+
+  # ProjectionStale (SCRUM-127): the newest projected event is over 15 minutes old while messages are
+  # waiting. Staging is stale and behind, so it fires; production is just as old but has nothing waiting,
+  # so it is quiet rather than stale and does not fire.
+  - interval: 1m
+    input_series:
+      - series: 'traceability_newest_projected_event_timestamp_seconds{service="traceability-service", environment="staging"}'
+        values: '100x40'
+      - series: 'kafka_consumergroup_lag{consumergroup="traceability-stage-events", topic="wonrich.processing.stage-events.v1", partition="0", environment="staging"}'
+        values: '20x40'
+      - series: 'traceability_newest_projected_event_timestamp_seconds{service="traceability-service", environment="production"}'
+        values: '100x40'
+      - series: 'kafka_consumergroup_lag{consumergroup="traceability-stage-events", topic="wonrich.processing.stage-events.v1", partition="0", environment="production"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ProjectionStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ProjectionStale
+        exp_alerts:
+          - exp_labels: {severity: warning, environment: staging}
+            exp_annotations:
+              summary: "Traceability's read model is stale (staging)"
+              description: "The newest event Traceability has projected is more than 15 minutes old, and its consumer groups still have messages waiting. The dashboard no longer shows the factory floor as it is."

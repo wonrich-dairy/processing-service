@@ -9,14 +9,29 @@
 #       processing-service=<processing app host>
 #
 # Each <service>=<host> becomes one HTTPS scrape job labelled service=<service>, environment=staging.
+# Put --prod before the targets that belong to production: they are labelled environment=production, so
+# the dashboard's Environment switch can tell them apart.
+#
+#   ./infra/observability/staging/deploy.sh <vm-fqdn> traceability-service=<staging host> --prod traceability-service=<production host>
+#
+# Both brokers' kafka-exporters are scraped on every run (environment=staging and environment=production).
 # Re-run it to add a service or pick up changed alerts or dashboards; Grafana's password and both
 # data volumes are kept. Needs SSH access to the VM (the Kafka VM's admin user).
 set -euo pipefail
 cd "$(dirname "$0")/../../.."          # repository root
 
-FQDN="${1:?usage: $0 <vm-fqdn> <service>=<host> [...]}"
+FQDN="${1:?usage: $0 <vm-fqdn> <service>=<host> [...] [--prod <service>=<host> ...]}"
 shift
 [ $# -gt 0 ] || { echo "give at least one <service>=<app-service-host>" >&2; exit 2; }
+
+# Everything before --prod is staging, everything after it is production.
+targets=()
+environment=staging
+for arg in "$@"; do
+  if [ "$arg" = --prod ]; then environment=production; continue; fi
+  targets+=("$environment|$arg")
+done
+[ ${#targets[@]} -gt 0 ] || { echo "give at least one <service>=<app-service-host>" >&2; exit 2; }
 REMOTE="${SSH_USER:-azureuser}@$FQDN"
 
 STAGE="$(mktemp -d)"
@@ -42,24 +57,45 @@ scrape_configs:
           service: prometheus
           environment: staging
 EOF
-  for pair in "$@"; do
+  for target in "${targets[@]}"; do
+    environment="${target%%|*}"
+    pair="${target#*|}"
     service="${pair%%=*}"
+    job="$service"
+    if [ "$environment" = production ]; then job="$service-prod"; fi
     host="${pair#*=}"
     host="${host#https://}"; host="${host%/}"
     [[ "$service" =~ ^[a-z0-9-]+$ && -n "$host" && "$pair" == *=* ]] \
       || { echo "bad argument '$pair' - expected <service>=<host>" >&2; exit 2; }
     cat <<EOF
 
-  - job_name: $service
+  - job_name: $job
     scheme: https
     metrics_path: /metrics
     static_configs:
       - targets: ['$host']
         labels:
           service: $service
-          environment: staging
+          environment: $environment
 EOF
   done
+  # The exporters sit on the observability network and are reached by container name.
+  cat <<'EOF'
+
+  - job_name: kafka-exporter-staging
+    static_configs:
+      - targets: ['kafka-exporter:9308']
+        labels:
+          service: kafka-exporter
+          environment: staging
+
+  - job_name: kafka-exporter-production
+    static_configs:
+      - targets: ['kafka-exporter-prod:9308']
+        labels:
+          service: kafka-exporter
+          environment: production
+EOF
 } > "$STAGE/prometheus/prometheus.yml"
 
 # ── shared files: the same alert rules and dashboard as local ───────────────────────────────────
@@ -74,7 +110,7 @@ grep -E "job_name|targets" "$STAGE/prometheus/prometheus.yml" | sed 's/^/   /'
 
 echo "== copying to $REMOTE:~/observability"
 ssh "$REMOTE" 'mkdir -p ~/observability'
-scp -rq "$STAGE"/. "$REMOTE:~/observability/"
+tar -C "$STAGE" -cf - . | ssh "$REMOTE" 'tar --overwrite -C ~/observability -xf -'
 
 echo "== starting (Grafana password generated on first run only)"
 ssh "$REMOTE" 'bash -s' <<'REMOTE_SCRIPT'

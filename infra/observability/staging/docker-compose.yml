@@ -52,6 +52,34 @@ services:
       - prometheus
     mem_limit: 256m
 
+  # Event-pipeline health (SCRUM-127). kafka-exporter reads consumer-group lag and topic offsets from a
+  # broker and serves them to Prometheus. One per broker, each joined to that broker's Docker network and
+  # talking to its internal listener (kafka:9092), so no SASL credentials are involved. Nothing is published.
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.9.0
+    container_name: wonrich-kafka-exporter
+    restart: unless-stopped
+    command: ["--kafka.server=kafka:9092"]
+    networks: [default, kafka-staging]
+    mem_limit: 64m
+
+  kafka-exporter-prod:
+    image: danielqsj/kafka-exporter:v1.9.0
+    container_name: wonrich-kafka-exporter-prod
+    restart: unless-stopped
+    command: ["--kafka.server=kafka:9092"]
+    networks: [default, kafka-prod]
+    mem_limit: 64m
+
 volumes:
   prometheus-data:
   grafana-data:
+
+networks:
+  # The brokers' own compose networks, created by their compose projects in ~/kafka.
+  kafka-staging:
+    name: wonrich-kafka_default
+    external: true
+  kafka-prod:
+    name: wonrich-kafka-prod_default
+    external: true

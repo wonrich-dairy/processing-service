@@ -46,7 +46,7 @@
         {
           "refId": "A",
           "expr": "up{service=~\"$service\", environment=~\"$environment\", service!=\"prometheus\"}",
-          "legendFormat": "{{service}}",
+          "legendFormat": "{{service}} ({{environment}})",
           "instant": true
         }
       ],

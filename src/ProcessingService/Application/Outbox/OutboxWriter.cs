@@ -1,6 +1,6 @@
 using System.Text.Json;
 using ProcessingService.Domain.Entities;
-using ProcessingService.Domain.Events;
+using Wonrich.Processing.Contracts.Events;
 using ProcessingService.Infrastructure.Persistence;
 
 namespace ProcessingService.Application.Outbox;

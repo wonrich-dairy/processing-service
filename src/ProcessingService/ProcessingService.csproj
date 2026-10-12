@@ -24,4 +24,8 @@
     <PackageReference Include="Confluent.Kafka" Version="2.8.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="../Wonrich.Processing.Contracts/Wonrich.Processing.Contracts.csproj" />
+  </ItemGroup>
+
 </Project>

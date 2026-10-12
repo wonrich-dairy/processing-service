@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ProcessingService.Domain.Entities;
-using ProcessingService.Domain.Events;
+using Wonrich.Processing.Contracts.Events;
 using ProcessingService.Infrastructure.Persistence;
 using ProcessingService.Application.Outbox;
 

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/ProcessingService/ProcessingService.csproj" />
+    <Project Path="src/Wonrich.Processing.Contracts/Wonrich.Processing.Contracts.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ProcessingService.Tests/ProcessingService.Tests.csproj" />

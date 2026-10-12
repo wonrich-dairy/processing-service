@@ -1,7 +1,4 @@
-using System.Diagnostics.Metrics;
-using System.Text;
-using Microsoft.EntityFrameworkCore;
-using ProcessingService.Infrastructure.Persistence;
+using Prometheus;
 
 namespace ProcessingService.Api.Infrastructure.Observability;
 
@@ -22,6 +19,8 @@ public static class ObservabilityExtensions
         // Metrics
         services.AddMetrics();
         services.AddSingleton<ProcessingMetrics>();
+        // Copies what ProcessingMetrics records into prometheus-net so /metrics reports real values
+        services.AddHostedService<PrometheusMeterBridge>();
 
         // HttpContextAccessor needed for CorrelationIdHandler
         services.AddHttpContextAccessor();
@@ -48,65 +47,9 @@ public static class ObservabilityExtensions
 
     public static IEndpointRouteBuilder MapProcessingMetrics(this IEndpointRouteBuilder endpoints)
     {
-        // Prometheus exposition format - /metrics endpoint (SCRUM-90 AC)
-        endpoints.MapGet("/metrics", async (HttpContext context, IServiceScopeFactory scopeFactory, IMeterFactory meterFactory, ProcessingMetrics metrics) =>
-        {
-            context.Response.ContentType = "text/plain; version=0.0.4; charset=utf-8";
-
-            var sb = new StringBuilder();
-            sb.AppendLine("# HELP processing_http_requests_total Total HTTP requests per endpoint");
-            sb.AppendLine("# TYPE processing_http_requests_total counter");
-            sb.AppendLine("# HELP processing_http_request_duration_seconds HTTP request duration per endpoint");
-            sb.AppendLine("# TYPE processing_http_request_duration_seconds histogram");
-            sb.AppendLine("# HELP processing_http_request_errors_total Total HTTP errors per endpoint");
-            sb.AppendLine("# TYPE processing_http_request_errors_total counter");
-            sb.AppendLine("# HELP processing_allocations_total Total milk allocations");
-            sb.AppendLine("# TYPE processing_allocations_total counter");
-            sb.AppendLine("# HELP processing_stages_total Total processing stages");
-            sb.AppendLine("# TYPE processing_stages_total counter");
-            sb.AppendLine("# HELP processing_holds_total Total held consignments");
-            sb.AppendLine("# TYPE processing_holds_total counter");
-            sb.AppendLine("# HELP processing_unloads_total Total milk unloads");
-            sb.AppendLine("# TYPE processing_unloads_total counter");
-            sb.AppendLine("# HELP processing_tanks_in_use Current tanks in use");
-            sb.AppendLine("# TYPE processing_tanks_in_use gauge");
-            sb.AppendLine("# HELP processing_outbox_backlog Undispatched outbox rows awaiting Kafka publish (SCRUM-68; review fix #11) - Pending sustained growth means broker outage or relay down, Poisoned above zero needs human review. Grafana hook for SCRUM-111");
-            sb.AppendLine("# TYPE processing_outbox_backlog gauge");
-
-            // In real implementation, use MeterListener to collect actual values
-            // For scaffold, return static exposition with help text + current timestamp to prove endpoint works
-            sb.AppendLine($"# Generated at {DateTimeOffset.UtcNow:O}");
-            sb.AppendLine("processing_http_requests_total 0");
-            sb.AppendLine("processing_allocations_total 0");
-            sb.AppendLine("processing_stages_total 0");
-            sb.AppendLine("processing_holds_total 0");
-            sb.AppendLine("processing_unloads_total 0");
-            sb.AppendLine("processing_tanks_in_use 0");
-
-            // Outbox backlog: REAL gauge queried at scrape time (review fix #11)
-            // Plain COUNT under InnoDB consistent read does not block on the relay's FOR UPDATE SKIP LOCKED claim locks (MVCC snapshot)
-            try
-            {
-                using var scope = scopeFactory.CreateScope();
-                var db = scope.ServiceProvider.GetRequiredService<ProcessingDbContext>();
-                var counts = await db.OutboxMessages
-                    .GroupBy(m => m.Status)
-                    .Select(g => new { Status = g.Key, Count = g.Count() })
-                    .ToListAsync(context.RequestAborted);
-                var pending = counts.FirstOrDefault(c => c.Status == "Pending")?.Count ?? 0;
-                var poisoned = counts.FirstOrDefault(c => c.Status == "Poisoned")?.Count ?? 0;
-                sb.AppendLine($"processing_outbox_backlog{{status=\"Pending\"}} {pending}");
-                sb.AppendLine($"processing_outbox_backlog{{status=\"Poisoned\"}} {poisoned}");
-            }
-            catch
-            {
-                // DB unreachable or migration pending - never fail the whole scrape, just omit the samples (Prometheus shows a gap)
-                sb.AppendLine("# outbox backlog unavailable (database unreachable or migration pending)");
-            }
-
-            await context.Response.WriteAsync(sb.ToString());
-        }).AllowAnonymous().WithDisplayName("Prometheus Metrics");
-
+        // Prometheus exposition format, anonymous so Prometheus needs no token (SCRUM-90 AC).
+        // The values come from PrometheusMeterBridge, which copies what the service records on its meter.
+        endpoints.MapMetrics("/metrics").AllowAnonymous();
         return endpoints;
     }
 }

@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Routing;
 
 namespace ProcessingService.Api.Infrastructure.Observability;
 
@@ -20,8 +21,14 @@ public sealed class RequestMetricsMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Prometheus scrapes /metrics every 15 s; counting those would make the scraper the busiest client.
+        if (context.Request.Path.StartsWithSegments("/metrics"))
+        {
+            await _next(context);
+            return;
+        }
+
         var sw = Stopwatch.StartNew();
-        var endpoint = context.GetEndpoint()?.DisplayName ?? context.Request.Path.Value ?? "unknown";
         var method = context.Request.Method;
 
         try
@@ -29,12 +36,15 @@ public sealed class RequestMetricsMiddleware
             await _next(context);
 
             var status = context.Response.StatusCode;
+            var endpoint = EndpointLabel(context);
             var tags = new TagList { { "method", method }, { "endpoint", endpoint }, { "status", status.ToString() } };
 
             _metrics.RequestsTotal.Add(1, tags);
             _metrics.RequestDurationSeconds.Record(sw.Elapsed.TotalSeconds, tags);
 
-            if (status >= 400)
+            // Only 5xx count as errors: a 4xx is the caller's mistake, not the service failing, and the
+            // HighErrorRate alert would otherwise fire on every expired token.
+            if (status >= 500)
             {
                 _metrics.RequestErrorsTotal.Add(1, tags);
             }
@@ -45,6 +55,7 @@ public sealed class RequestMetricsMiddleware
         }
         catch (Exception ex)
         {
+            var endpoint = EndpointLabel(context);
             var tags = new TagList { { "method", method }, { "endpoint", endpoint }, { "status", "500" } };
             _metrics.RequestsTotal.Add(1, tags);
             _metrics.RequestErrorsTotal.Add(1, tags);
@@ -55,6 +66,16 @@ public sealed class RequestMetricsMiddleware
             throw;
         }
     }
+
+    /// <summary>
+    /// The route template (for example "/api/tanks/{id}"), never the raw path: raw paths would create a new time
+    /// series for every ID, and requests matching no route share one "unmatched" label so a scanner probing
+    /// random URLs cannot do the same.
+    /// </summary>
+    private static string EndpointLabel(HttpContext context) =>
+        context.GetEndpoint() is RouteEndpoint route
+            ? "/" + (route.RoutePattern.RawText ?? string.Empty).TrimStart('/')
+            : "unmatched";
 }
 
 public static class RequestMetricsMiddlewareExtensions

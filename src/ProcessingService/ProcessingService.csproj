@@ -20,6 +20,7 @@
     <PackageReference Include="Microting.EntityFrameworkCore.MySql" Version="10.0.10" />
     <PackageReference Include="Microsoft.OpenApi" Version="2.7.5" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
+    <PackageReference Include="prometheus-net.AspNetCore" Version="8.2.1" />
     <!-- SCRUM-68: Kafka producer for publishing processing events -->
     <PackageReference Include="Confluent.Kafka" Version="2.8.0" />
   </ItemGroup>

@@ -11,6 +11,11 @@ namespace ProcessingService.Application.Outbox;
 /// </summary>
 public sealed class OutboxWriter : IOutboxWriter
 {
+    private static readonly Prometheus.Counter EventsWritten = Prometheus.Metrics.CreateCounter(
+        "processing_events_written_total",
+        "Events written to the outbox, by event type. Counted when the event is written with the record, before it reaches Kafka.",
+        new Prometheus.CounterConfiguration { LabelNames = ["event_type"] });
+
     private readonly ProcessingDbContext _db;
     private readonly TimeProvider _time;
 
@@ -39,6 +44,8 @@ public sealed class OutboxWriter : IOutboxWriter
     public Task WriteAsync(string topic, string key, string eventType, string payloadJson, string headersJson, string correlationId, CancellationToken cancellationToken)
     {
         var now = _time.GetUtcNow().UtcDateTime;
+
+        EventsWritten.WithLabels(eventType).Inc();
 
         var message = new OutboxMessage
         {

@@ -126,22 +126,17 @@ It is committed as JSON and provisioned read-only. Editing it in the UI will not
 file, so change the file and restart Grafana — otherwise the next rebuild silently discards the
 edit.
 
-> ### Known gap: Processing Service's request panels read zero
+> ### Processing Service's metrics (fixed)
 >
-> Quality Lab Service exports real values (prometheus-net). Processing Service's
-> `/metrics` currently returns hardcoded zeros. The endpoint, the counters and the middleware that
-> records them were built in SCRUM-90, but the endpoint does not yet read the meters — the code
-> says so itself: *"In real implementation, use MeterListener to collect actual values"*.
+> Processing Service used to answer `/metrics` with fixed zeros: the numbers were recorded on a .NET meter,
+> but nothing read the meter, so the request, error and latency panels stayed flat and `HighErrorRate`
+> could never fire. `PrometheusMeterBridge` now copies every measurement on that meter into prometheus-net,
+> and `/metrics` serves it. The metric names and labels are unchanged, plus `processing_events_written_total`
+> (events written to the outbox, by event type, which shows stage and hold activity).
 >
-> So the request-rate, error-rate and response-time panels render correctly and stay flat at zero,
-> and the `HighErrorRate` alert cannot fire. The availability panel and the `ServiceDown` alert are
-> unaffected, because `up` is synthesised by Prometheus from whether the scrape succeeded and needs
-> nothing from the application.
->
-> Fixing it means exporting the existing `Wonrich.ProcessingService` meter properly — an
-> `OpenTelemetry.Exporter.Prometheus.AspNetCore` endpoint would do it without changing any of the
-> instrumentation SCRUM-90 already wrote. That is a change to the processing service's application
-> code and belongs to whoever owns SCRUM-90, not to this ticket.
+> Requests are labelled by route template (`/api/tanks/{id}`, or `unmatched`), never by raw path, so a scanner
+> cannot create a time series per URL. Only 5xx responses count as errors, as in Quality Lab, so an expired
+> token does not trip `HighErrorRate`. Prometheus's own scrapes of `/metrics` are not counted.
 
 ## Retention
 
@@ -167,7 +162,7 @@ the UI.
 | Alert | Fires when | Works today |
 |---|---|---|
 | `ServiceDown` | a service fails scraping for 2 minutes | **yes**, for every service |
-| `HighErrorRate` | over 5% of requests error for 5 minutes | **yes** for Quality Lab; not for Processing until its `/metrics` is real |
+| `HighErrorRate` | over 5% of requests error for 5 minutes | **yes**, for every service that follows the `<service>_http_*` convention |
 
 Both select services by label and metric-name pattern, not by a list of jobs, so a new service is
 covered as soon as it has a scrape job (SCRUM-111). Three more rules watch the event pipeline

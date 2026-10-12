@@ -29,7 +29,7 @@ Depends on: SCRUM-88 (topics), SCRUM-58 (outbox shared client)
 
 ## Event Contracts - Versioned in Shared Library
 
-**Location:** `src/ProcessingService/Domain/Events/ProcessingEvents.cs` - simulates shared library under SCRUM-58
+**Location:** `src/Wonrich.Processing.Contracts` (SCRUM-130), published as the NuGet package `Wonrich.Processing.Contracts` on the organisation's GitHub Packages feed from a tag `contracts-v<version>` (see `.github/workflows/publish-contracts.yml` and the project's `README.md`)
 
 **Versioning:** v1 initial, breaking change gets new topic .v2, non-breaking (optional field) stays same version
 
@@ -211,7 +211,7 @@ Traceability consumes at own pace into own store, answers dashboard queries with
 - Rollback case tested - forced transaction failure produces no event (unit test)
 - Broker-unavailable case tested by stopping broker; DB write still succeeds and event retried (manual test + unit test)
 - Correlation ID present in headers as `x-correlation-id`, traceable in Loki (check logs for correlationId property)
-- Contracts documented in shared library (this doc + Domain/Events)
+- Contracts documented in shared library (this doc + src/Wonrich.Processing.Contracts)
 - Unit tests cover publish-after-commit path and failure path (tests/ProcessingService.Tests/Kafka/OutboxTests.cs)
 - Outbox backlog gauge `processing_outbox_backlog` (Pending + Poisoned) exposed on /metrics in Prometheus format for the SCRUM-111 Grafana dashboard (review fix #11: sustained Pending growth = broker outage or relay down; Poisoned > 0 = needs human review)
 - Code merged via reviewed PR

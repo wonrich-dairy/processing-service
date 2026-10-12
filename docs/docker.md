@@ -4,7 +4,7 @@
 
 ### AC: Working Dockerfile
 - **Status:** ✅ Implemented
-- **Files:** `Dockerfile` (root, multi-stage), `src/ProcessingService/Dockerfile` (alternative)
+- **Files:** `Dockerfile` (root, multi-stage). It copies the project files of the service and of `Wonrich.Processing.Contracts` before `dotnet restore`; a referenced project that is not copied first fails the build with NETSDK1004
 
 ### AC: docker-compose.yml brings up Processing Service with one command
 - **Status:** ✅ Implemented
@@ -59,7 +59,6 @@ docker compose up -d --build
 Build:
 ```bash
 docker build -t processing-service:local -f Dockerfile .
-docker build -t processing-service:local -f src/ProcessingService/Dockerfile src/ProcessingService/
 ```
 
 ## docker-compose.yml Details (Remote DB Pattern)

@@ -1,4 +1,4 @@
-using ProcessingService.Domain.Events;
+using Wonrich.Processing.Contracts.Events;
 
 namespace ProcessingService.Application.Outbox;
 

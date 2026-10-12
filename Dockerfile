@@ -8,6 +8,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["src/ProcessingService/ProcessingService.csproj", "src/ProcessingService/"]
+COPY ["src/Wonrich.Processing.Contracts/Wonrich.Processing.Contracts.csproj", "src/Wonrich.Processing.Contracts/"]
 RUN dotnet restore "src/ProcessingService/ProcessingService.csproj"
 COPY . .
 WORKDIR "/src/src/ProcessingService"

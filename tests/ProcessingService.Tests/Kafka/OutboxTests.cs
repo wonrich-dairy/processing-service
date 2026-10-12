@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using ProcessingService.Domain.Entities;
-using ProcessingService.Domain.Events;
+using Wonrich.Processing.Contracts.Events;
 using ProcessingService.Application.Outbox;
 using ProcessingService.Application.Kafka;
 using ProcessingService.Infrastructure.Persistence;

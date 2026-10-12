@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Event contracts Processing Service publishes on wonrich.processing.stage-events.v1 and
+    wonrich.processing.hold-events.v1 (SCRUM-68, SCRUM-88, SCRUM-130).
+    Consumers (Traceability, Quality Lab) reference this package instead of copying the classes.
+
+    Versioning: the major version follows the topics' schemaVersion, so 1.x.y is "v1".
+    - Added optional field            -> minor bump (1.1.0), same topics.
+    - Breaking change (rename/remove) -> 2.0.0 together with new .v2 topics.
+    Published from CI on a tag contracts-v<Version> (see .github/workflows/publish-contracts.yml);
+    the tag must match <Version> below, so every published version maps to one commit.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Wonrich.Processing.Contracts</RootNamespace>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <IsPackable>true</IsPackable>
+    <PackageId>Wonrich.Processing.Contracts</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Wonrich Dairy</Authors>
+    <Company>Wonrich Dairy</Company>
+    <Description>Kafka event contracts published by the Wonrich Processing service on wonrich.processing.stage-events.v1 and wonrich.processing.hold-events.v1: MilkAllocatedToMixingTankEvent, ProcessingStageRecordedEvent, ProcessingCompletedEvent, ProcessingHoldRaisedEvent and ProcessingHoldResolvedEvent (schemaVersion v1).</Description>
+    <PackageTags>wonrich;processing;kafka;contracts;events</PackageTags>
+    <RepositoryUrl>https://github.com/wonrich-dairy/processing-service</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+</Project>

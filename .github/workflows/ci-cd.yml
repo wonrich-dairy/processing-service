@@ -76,6 +76,10 @@ jobs:
       - name: Build
         run: dotnet build ${{ env.SOLUTION }} --configuration Release --no-restore
 
+      # Wonrich.Processing.Contracts must stay packable. Publishing is tag-only (publish-contracts.yml).
+      - name: Pack contracts (validation)
+        run: dotnet pack src/Wonrich.Processing.Contracts/Wonrich.Processing.Contracts.csproj --configuration Release --no-build -o artifacts/packages
+
       # The suite boots the app through WebApplicationFactory. It needs no database: the health
       # check reports the connection as unhealthy and the test accepts that, so CI stays
       # independent of mcc-db being reachable from a GitHub runner.

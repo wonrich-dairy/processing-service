@@ -221,3 +221,68 @@ Retention is bounded: Prometheus keeps 7 days or 2 GB, whichever comes first; Lo
 > `docs/observability.md`.
 
 Full detail, including the hosted Grafana Cloud approach: `docs/observability.md`.
+
+
+## Unit Testing & Mocking (SE3112)
+
+**Implemented by:** `Abeyweera A.M.P.V.T.C`
+
+Unit tests for the processing service. They use parameterized tests, stubs and mocks, a fake clock and an
+in-memory database, so they need no MySQL, Kafka, network or real clock. There are 56 unit test cases in 20 test
+methods. The full test project also contains the 25 existing API and Kafka tests, so the whole suite has 81.
+
+### What is tested
+
+| Class under test | Test class | Test doubles |
+|------------------|------------|--------------|
+| `ProcessingRunService` (unloading milk into a storing tank) | `ProcessingRunServiceTests` | `IMccDispatchClient` stub and mock (NSubstitute), `FakeTimeProvider`, EF InMemory |
+| `ProcessingStageService` (heating, homogeniser, pasteuriser, cooling) | `ProcessingStageServiceTests` | `IOutboxWriter` mock (NSubstitute), `FakeTimeProvider`, EF InMemory |
+| `TankTemperatureLogService` (temperature readings) | `TankTemperatureLogServiceTests` | `FakeTimeProvider`, EF InMemory |
+| Tank code rules (`Tank.NormalizeCode`) | `TankCodeNormalizerTests` | none (pure logic) |
+
+Tests cover boundary values (just below, at and just above each limit), invalid input, and failure paths
+(MCC service down, outbox down). Test code is in `tests/ProcessingService.Tests/Unit`, and shared helpers
+are in `tests/ProcessingService.Tests/Support`.
+
+### Tools
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| .NET SDK | 10.x (pinned in `global.json`) | build and run tests |
+| xUnit | 2.9.3 | test framework (`[Fact]`, `[Theory]`, `[InlineData]`, `[MemberData]`) |
+| NSubstitute | 5.3.0 | stubs and mocks for `IMccDispatchClient` and `IOutboxWriter` |
+| Microsoft.Extensions.TimeProvider.Testing | 10.0.0 | `FakeTimeProvider`, a controllable clock |
+| EF Core InMemory | 10.0.11 | in-memory database instead of MySQL |
+| coverlet.collector | 6.0.4 | line coverage, Cobertura output |
+| dotnet-reportgenerator-globaltool | latest | optional readable coverage summary |
+
+### Setup
+
+```bash
+dotnet --version     # must be a .NET 10 SDK
+dotnet restore
+dotnet build
+```
+
+### Commands (run from the repository root)
+
+```bash
+dotnet test                                                              # all tests
+dotnet test --filter "FullyQualifiedName~ProcessingService.Tests.Unit"   # unit tests only
+./scripts/unit-tests.sh                                                  # tests + coverage summary (Windows: ./scripts/unit-tests.ps1)
+```
+
+The script needs the report tool once: `dotnet tool install -g dotnet-reportgenerator-globaltool`.
+Coverage is written to `TestResults/**/coverage.cobertura.xml` in Cobertura format, configured by
+`coverage.runsettings`. The HTML report is in `coverage-report/`.
+
+### CI/CD pipeline
+
+`.github/workflows/ci-cd.yml` runs the tests in the `build-and-test` job on every pull request and every push to
+`develop` and `main`:
+
+1. `dotnet test` runs all tests with coverage collection.
+2. A coverage summary is shown on the workflow run page.
+3. The Cobertura file and the HTML report are uploaded as the `test-results` artifact, ready for SonarCloud
+   and Stryker.NET.
+4. The staging and production deploy jobs declare `needs: build-and-test`, so a failing test blocks deployment.

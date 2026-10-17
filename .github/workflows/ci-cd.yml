@@ -83,8 +83,37 @@ jobs:
       # The suite boots the app through WebApplicationFactory. It needs no database: the health
       # check reports the connection as unhealthy and the test accepts that, so CI stays
       # independent of mcc-db being reachable from a GitHub runner.
-      - name: Test
-        run: dotnet test ${{ env.SOLUTION }} --configuration Release --no-build --verbosity normal
+      # SE3112: this step runs the whole suite, including the unit tests in tests/ProcessingService.Tests/Unit
+      # (parameterized xUnit tests with NSubstitute doubles). It also collects line coverage as Cobertura
+      # (coverage.runsettings) and writes a .trx result file. A failing test fails the job, so nothing deploys.
+      - name: Test (unit + API tests, with coverage)
+        run: >-
+          dotnet test ${{ env.SOLUTION }} --configuration Release --no-build --verbosity normal
+          --settings coverage.runsettings --collect:"XPlat Code Coverage"
+          --results-directory TestResults --logger "trx;LogFileName=test-results.trx"
+
+      # Readable coverage numbers on the run page (the job summary), built from the Cobertura file.
+      - name: Coverage summary
+        if: ${{ !cancelled() && hashFiles('TestResults/**/coverage.cobertura.xml') != '' }}
+        run: |
+          dotnet tool install dotnet-reportgenerator-globaltool --tool-path ./.tools
+          ./.tools/reportgenerator \
+            -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:coverage-report \
+            -reporttypes:"MarkdownSummaryGithub;Html" \
+            -classfilters:"+ProcessingService.Application.*;+ProcessingService.Domain.*"
+          cat coverage-report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Keep the raw Cobertura file and the HTML report so SonarCloud / Stryker steps (or a person) can use them.
+      - name: Upload test results and coverage
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            TestResults
+            coverage-report
+          if-no-files-found: ignore
 
       - name: Publish
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'

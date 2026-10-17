@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat code coverage">
+        <Configuration>
+          <!-- Cobertura so SonarCloud and the group pipeline can read it -->
+          <Format>cobertura</Format>
+          <!-- EF migrations are generated code that never runs under test -->
+          <Exclude>[ProcessingService]ProcessingService.Infrastructure.Persistence.Migrations.*</Exclude>
+          <ExcludeByFile>**/Infrastructure/Persistence/Migrations/**/*.cs</ExcludeByFile>
+          <ExcludeByAttribute>Obsolete,GeneratedCodeAttribute,CompilerGeneratedAttribute,ExcludeFromCodeCoverageAttribute</ExcludeByAttribute>
+          <SkipAutoProps>true</SkipAutoProps>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

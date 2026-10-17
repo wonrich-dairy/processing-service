@@ -42,3 +42,4 @@ logs/
 # Test output
 TestResults/
 coverage-report/
+results/

@@ -192,6 +192,15 @@ jobs:
           echo "::error::$url did not report healthy"
           exit 1
 
+  # ── Performance (SE3112 load testing) ─────────────────────────────────────────────────────
+  # JMeter load test against staging once it reports healthy. It runs after the deployment, so a
+  # performance regression fails the run but never blocks or rolls back what was deployed.
+  # Runs the steady `load` profile; stress and spike are run by hand from performance.yml.
+  performance:
+    needs: deploy-staging
+    uses: ./.github/workflows/performance.yml
+    secrets: inherit
+
   # ── Production ────────────────────────────────────────────────────────────────────────────
   # `environment: production` is what pauses the run for manual approval: the environment created
   # in SCRUM-70 carries a required reviewer and a main-only branch policy. The `if` below is a

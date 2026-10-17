@@ -1,0 +1,131 @@
+name: Performance test (JMeter)
+
+# JMeter load test against the Processing Service on staging (SE3112 load testing).
+#
+# Runs two ways:
+#   - after every staging deployment, as the `performance` job in ci-cd.yml. It runs after the
+#     deployment, so a performance regression fails the run but never blocks or undoes it;
+#   - by hand: Actions -> Performance test (JMeter) -> Run workflow, with the load profile and
+#     thresholds as inputs.
+#
+# Load profile, thresholds and how to read the report: docs/performance-testing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: "Load profile: load (steady), stress (10 -> 25 -> 50 users) or spike (5 -> 50 -> 5)"
+        type: choice
+        options: [load, stress, spike]
+        default: load
+      step_seconds:
+        description: Seconds per step for stress and spike (ignored by load)
+        default: "60"
+      users:
+        description: Concurrent virtual users
+        default: "10"
+      ramp_seconds:
+        description: Seconds to start all users
+        default: "30"
+      duration_seconds:
+        description: Test length in seconds
+        default: "120"
+      think_ms:
+        description: Minimum pause between a user's requests (ms); up to 500 ms is added at random
+        default: "1000"
+      p95_ms:
+        description: Fail if p95 latency exceeds this (ms). NFR1 is 2000
+        default: "2000"
+      max_error_pct:
+        description: Fail if the error rate exceeds this (%)
+        default: "1"
+  workflow_call:
+    inputs:
+      profile:          { type: string, default: "load" }
+      step_seconds:     { type: string, default: "60" }
+      users:            { type: string, default: "10" }
+      ramp_seconds:     { type: string, default: "30" }
+      duration_seconds: { type: string, default: "120" }
+      think_ms:         { type: string, default: "1000" }
+      p95_ms:           { type: string, default: "2000" }
+      max_error_pct:    { type: string, default: "1" }
+
+permissions:
+  contents: read
+
+env:
+  JMETER_VERSION: "5.6.3"
+  PLAN: perf/processing.jmx
+
+jobs:
+  jmeter:
+    name: JMeter against staging
+    runs-on: ubuntu-latest
+    environment: staging          # PERF_USERNAME / PERF_PASSWORD secrets, AUTH_HOST variable
+    timeout-minutes: 30
+    env:
+      PROFILE: ${{ inputs.profile }}
+      STEP_SECONDS: ${{ inputs.step_seconds }}
+      USERS: ${{ inputs.users }}
+      RAMP: ${{ inputs.ramp_seconds }}
+      DURATION: ${{ inputs.duration_seconds }}
+      THINK_MS: ${{ inputs.think_ms }}
+      P95_MS: ${{ inputs.p95_ms }}
+      MAX_ERROR_PCT: ${{ inputs.max_error_pct }}
+      TARGET_HOST: ${{ vars.PERF_TARGET_HOST || 'app-wonrich-processing-staging.azurewebsites.net' }}
+      AUTH_HOST: ${{ vars.AUTH_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache JMeter
+        id: cache-jmeter
+        uses: actions/cache@v4
+        with:
+          path: ~/jmeter
+          key: jmeter-${{ env.JMETER_VERSION }}
+
+      - name: Install JMeter
+        if: steps.cache-jmeter.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL "https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz" | tar xz -C ~
+          mv ~/"apache-jmeter-${JMETER_VERSION}" ~/jmeter
+
+      - name: Check inputs
+        run: |
+          [[ "$PROFILE" =~ ^(load|stress|spike)$ ]] || { echo "::error::profile must be load, stress or spike, got '$PROFILE'"; exit 1; }
+          for v in USERS RAMP DURATION STEP_SECONDS THINK_MS P95_MS MAX_ERROR_PCT; do
+            [[ "${!v}" =~ ^[0-9]+([.][0-9]+)?$ ]] || { echo "::error::$v must be a number, got '${!v}'"; exit 1; }
+          done
+                    [ -n "$AUTH_HOST" ]   || { echo "::error::Set the AUTH_HOST variable on the staging environment"; exit 1; }
+          for h in TARGET_HOST AUTH_HOST; do
+            [[ "${!h}" != *"://"* && "${!h}" != */ ]] || { echo "::error::$h must be a bare host name (no https:// and no trailing slash), got '${!h}'"; exit 1; }
+          done
+          echo "Target https://$TARGET_HOST - profile $PROFILE (users/ramp/duration apply to load, step_seconds to stress and spike); think ${THINK_MS}ms+; thresholds p95 ${P95_MS}ms, errors ${MAX_ERROR_PCT}%"
+
+      - name: Run load test (${{ inputs.profile }})
+        env:
+          PERF_USERNAME: ${{ secrets.PERF_USERNAME }}
+          PERF_PASSWORD: ${{ secrets.PERF_PASSWORD }}
+          RUN_ID: ${{ github.run_number }}-${{ github.run_attempt }}   # written into each temperature log's note: PERF-JMETER run <run>-<attempt>
+          HOST: ${{ env.TARGET_HOST }}
+          OUT: results
+          P95_MS: ""          # thresholds are checked in their own step, after the report is uploaded
+          MAX_ERROR_PCT: ""
+        # perf/run.sh maps the profile to users per phase; the same script runs locally.
+        run: JMETER="$HOME/jmeter/bin/jmeter" bash perf/run.sh "$PROFILE"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jmeter-report
+          path: results/
+          retention-days: 30
+
+      - name: Check thresholds
+        run: bash perf/check-thresholds.sh results/report/statistics.json "$P95_MS" "$MAX_ERROR_PCT"

@@ -1,0 +1,392 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+<hashTree>
+<TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Processing Service - performance" enabled="true">
+  <stringProp name="TestPlan.comments">SE3112 load testing. Target and load are JMeter properties (-J): host, auth_host, username, password, think_ms, run_id, and p1/p2/p3 _users, _ramp, _duration for the three phases. Thread groups run one after another (serialized): load uses phase 1 only; stress steps 10, 25, 50 users; spike goes 5, 50, 5. Run it through perf/run.sh &lt;load|stress|spike&gt;. Only samplers labelled 'read:' or 'write:' are measured; 'setup:' and 'teardown:' samplers are excluded from the report. See docs/performance-testing.md.</stringProp>
+  <boolProp name="TestPlan.functional_mode">false</boolProp>
+  <boolProp name="TestPlan.serialize_threadgroups">true</boolProp>
+  <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+  <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+</TestPlan>
+<hashTree>
+<ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP defaults: target service" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.domain">${__P(host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(port,)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(protocol,https)}</stringProp>
+  <stringProp name="HTTPSampler.connect_timeout">10000</stringProp>
+  <stringProp name="HTTPSampler.response_timeout">30000</stringProp>
+  <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+</ConfigTestElement>
+<hashTree />
+<SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="setup: sign in, warm up, performance tank" enabled="true">
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">1</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+  <boolProp name="ThreadGroup.scheduler">false</boolProp>
+  <stringProp name="ThreadGroup.duration" />
+  <stringProp name="ThreadGroup.delay" />
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+</SetupThreadGroup>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup: warm up" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/health</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup: sign in" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"userName":"${__P(username)}","password":"${__P(password)}"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/auth/login</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+  <stringProp name="HTTPSampler.domain">${__P(auth_host)}</stringProp>
+  <stringProp name="HTTPSampler.port">${__P(auth_port,)}</stringProp>
+  <stringProp name="HTTPSampler.protocol">${__P(auth_protocol,https)}</stringProp>
+</HTTPSamplerProxy>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp></collectionProp></HeaderManager><hashTree /><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="sign-in returns 200" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="0">200</stringProp></collectionProp><stringProp name="Assertion.custom_message">Sign-in failed: check PERF_USERNAME / PERF_PASSWORD and the auth host</stringProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><boolProp name="Assertion.assume_success">false</boolProp><intProp name="Assertion.test_type">8</intProp></ResponseAssertion><hashTree /><JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="extract accessToken" enabled="true"><stringProp name="JSONPostProcessor.referenceNames">token</stringProp><stringProp name="JSONPostProcessor.jsonPathExprs">$.accessToken</stringProp><stringProp name="JSONPostProcessor.match_numbers">1</stringProp><stringProp name="JSONPostProcessor.defaultValues">NOT_FOUND</stringProp></JSONPostProcessor><hashTree /><JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="share the token and run ID with the load threads" enabled="true"><stringProp name="scriptLanguage">groovy</stringProp><stringProp name="parameters" /><stringProp name="filename" /><stringProp name="cacheKey">true</stringProp><stringProp name="script">props.put("token", vars.get("token"))
+if (!props.getProperty("run_id")) { props.put("run_id", new Date().format("yyMMddHHmmss")) }</stringProp></JSR223PostProcessor><hashTree /></hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup: find the performance tank" enabled="true">
+  <stringProp name="TestPlan.comments">ST-99 is reserved for performance tests. A run that was killed before tearDown leaves it behind, so reuse it rather than fail on a duplicate code.</stringProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree /><JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="remember ST-99 if it already exists" enabled="true"><stringProp name="scriptLanguage">groovy</stringProp><stringProp name="parameters" /><stringProp name="filename" /><stringProp name="cacheKey">true</stringProp><stringProp name="script">props.remove("perf_tank_id")
+def tanks = new groovy.json.JsonSlurper().parseText(prev.getResponseDataAsString() ?: "[]")
+def tank = tanks.find { it.code == "ST-99" }
+if (tank) { props.put("perf_tank_id", tank.id.toString()); log.info("Reusing performance tank ST-99 " + tank.id) }</stringProp></JSR223PostProcessor><hashTree /></hashTree>
+<IfController guiclass="IfControllerPanel" testclass="IfController" testname="if ST-99 does not exist yet" enabled="true"><stringProp name="IfController.condition">${__groovy(props.get("perf_tank_id") == null)}</stringProp><boolProp name="IfController.evaluateAll">false</boolProp><boolProp name="IfController.useExpression">true</boolProp></IfController>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup: create the performance tank" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"code":"ST-99","kind":"Storing","capacityKg":1000}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree /><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="tank created" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="0">201</stringProp></collectionProp><stringProp name="Assertion.custom_message">Could not create tank ST-99: the perf user needs the ProcessingTechnician role</stringProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><boolProp name="Assertion.assume_success">false</boolProp><intProp name="Assertion.test_type">8</intProp></ResponseAssertion><hashTree /><JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="extract tank id" enabled="true"><stringProp name="JSONPostProcessor.referenceNames">perf_tank_id</stringProp><stringProp name="JSONPostProcessor.jsonPathExprs">$.id</stringProp><stringProp name="JSONPostProcessor.match_numbers">1</stringProp><stringProp name="JSONPostProcessor.defaultValues">NOT_FOUND</stringProp></JSONPostProcessor><hashTree /><JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="share the tank id" enabled="true"><stringProp name="scriptLanguage">groovy</stringProp><stringProp name="parameters" /><stringProp name="filename" /><stringProp name="cacheKey">true</stringProp><stringProp name="script">props.put("perf_tank_id", vars.get("perf_tank_id"))</stringProp></JSR223PostProcessor><hashTree /></hashTree>
+</hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup: hide the performance tank from processing screens" enabled="true">
+  <stringProp name="TestPlan.comments">Under maintenance, ST-99 drops out of the active-tank lists technicians pick from, but still accepts temperature logs.</stringProp>
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"status":"UnderMaintenance"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/status</stringProp>
+  <stringProp name="HTTPSampler.method">PUT</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree /></hashTree>
+</hashTree>
+<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="phase 1: processing technicians" enabled="true">
+  <stringProp name="TestPlan.comments">Load: the whole test. Stress: step 1. Spike: baseline before the spike. Users, ramp-up and duration come from -Jp1_users, -Jp1_ramp, -Jp1_duration (set by perf/run.sh from the profile).</stringProp>
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">-1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">${__P(p1_users,10)}</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">${__P(p1_ramp,30)}</stringProp>
+  <boolProp name="ThreadGroup.scheduler">true</boolProp>
+  <stringProp name="ThreadGroup.duration">${__P(p1_duration,120)}</stringProp>
+  <stringProp name="ThreadGroup.delay" />
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+</ThreadGroup>
+<hashTree>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree />
+<UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="think time" enabled="true">
+  <stringProp name="ConstantTimer.delay">${__P(think_ms,1000)}</stringProp>
+  <stringProp name="RandomTimer.range">500</stringProp>
+</UniformRandomTimer>
+<hashTree />
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="2xx" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="0">2\d\d</stringProp></collectionProp><stringProp name="Assertion.custom_message">Expected a 2xx response</stringProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><boolProp name="Assertion.assume_success">false</boolProp><intProp name="Assertion.test_type">1</intProp></ResponseAssertion><hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: active tanks" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks?activeOnly=true</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: active stages" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/processing-stages/active</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="write: log tank temperature" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"temperatureC":4.${__Random(0,9)},"note":"PERF-JMETER run ${__P(run_id)}"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/temperature-logs</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: last temperature" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/temperature-logs/last</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: processing runs" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/processing-runs</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+</hashTree>
+<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="phase 2: processing technicians" enabled="true">
+  <stringProp name="TestPlan.comments">Stress: step 2. Spike: the spike. Off (0 users) in the load profile. Users, ramp-up and duration come from -Jp2_users, -Jp2_ramp, -Jp2_duration (set by perf/run.sh from the profile).</stringProp>
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">-1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">${__P(p2_users,0)}</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">${__P(p2_ramp,1)}</stringProp>
+  <boolProp name="ThreadGroup.scheduler">true</boolProp>
+  <stringProp name="ThreadGroup.duration">${__P(p2_duration,1)}</stringProp>
+  <stringProp name="ThreadGroup.delay" />
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+</ThreadGroup>
+<hashTree>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree />
+<UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="think time" enabled="true">
+  <stringProp name="ConstantTimer.delay">${__P(think_ms,1000)}</stringProp>
+  <stringProp name="RandomTimer.range">500</stringProp>
+</UniformRandomTimer>
+<hashTree />
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="2xx" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="0">2\d\d</stringProp></collectionProp><stringProp name="Assertion.custom_message">Expected a 2xx response</stringProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><boolProp name="Assertion.assume_success">false</boolProp><intProp name="Assertion.test_type">1</intProp></ResponseAssertion><hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: active tanks" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks?activeOnly=true</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: active stages" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/processing-stages/active</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="write: log tank temperature" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"temperatureC":4.${__Random(0,9)},"note":"PERF-JMETER run ${__P(run_id)}"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/temperature-logs</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: last temperature" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/temperature-logs/last</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: processing runs" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/processing-runs</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+</hashTree>
+<ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="phase 3: processing technicians" enabled="true">
+  <stringProp name="TestPlan.comments">Stress: step 3. Spike: recovery after the spike. Off (0 users) in the load profile. Users, ramp-up and duration come from -Jp3_users, -Jp3_ramp, -Jp3_duration (set by perf/run.sh from the profile).</stringProp>
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">-1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">${__P(p3_users,0)}</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">${__P(p3_ramp,1)}</stringProp>
+  <boolProp name="ThreadGroup.scheduler">true</boolProp>
+  <stringProp name="ThreadGroup.duration">${__P(p3_duration,1)}</stringProp>
+  <stringProp name="ThreadGroup.delay" />
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+</ThreadGroup>
+<hashTree>
+<HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree />
+<UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="think time" enabled="true">
+  <stringProp name="ConstantTimer.delay">${__P(think_ms,1000)}</stringProp>
+  <stringProp name="RandomTimer.range">500</stringProp>
+</UniformRandomTimer>
+<hashTree />
+<ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="2xx" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="0">2\d\d</stringProp></collectionProp><stringProp name="Assertion.custom_message">Expected a 2xx response</stringProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><boolProp name="Assertion.assume_success">false</boolProp><intProp name="Assertion.test_type">1</intProp></ResponseAssertion><hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: active tanks" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks?activeOnly=true</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: active stages" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/processing-stages/active</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="write: log tank temperature" enabled="true">
+  <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+    <collectionProp name="Arguments.arguments">
+      <elementProp name="" elementType="HTTPArgument">
+        <boolProp name="HTTPArgument.always_encode">false</boolProp>
+        <stringProp name="Argument.value">{"temperatureC":4.${__Random(0,9)},"note":"PERF-JMETER run ${__P(run_id)}"}</stringProp>
+        <stringProp name="Argument.metadata">=</stringProp>
+      </elementProp>
+    </collectionProp>
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/temperature-logs</stringProp>
+  <stringProp name="HTTPSampler.method">POST</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: last temperature" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}/temperature-logs/last</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="read: processing runs" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/processing-runs</stringProp>
+  <stringProp name="HTTPSampler.method">GET</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree />
+</hashTree>
+<PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="teardown: remove the performance tank" enabled="true">
+  <stringProp name="TestPlan.comments">Deleting ST-99 also deletes every temperature log the run wrote (tank_temperature_logs cascades on delete), so each run leaves staging as it found it.</stringProp>
+  <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+  <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+    <boolProp name="LoopController.continue_forever">false</boolProp>
+    <stringProp name="LoopController.loops">1</stringProp>
+  </elementProp>
+  <stringProp name="ThreadGroup.num_threads">1</stringProp>
+  <stringProp name="ThreadGroup.ramp_time">1</stringProp>
+  <boolProp name="ThreadGroup.scheduler">false</boolProp>
+  <stringProp name="ThreadGroup.duration" />
+  <stringProp name="ThreadGroup.delay" />
+  <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+</PostThreadGroup>
+<hashTree>
+<HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="teardown: delete the performance tank" enabled="true">
+  <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+    <collectionProp name="Arguments.arguments" />
+  </elementProp>
+  <stringProp name="HTTPSampler.path">/api/tanks/${__P(perf_tank_id)}</stringProp>
+  <stringProp name="HTTPSampler.method">DELETE</stringProp>
+  <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+  <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+</HTTPSamplerProxy>
+<hashTree><HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="bearer token and correlation ID" enabled="true"><collectionProp name="HeaderManager.headers"><elementProp name="" elementType="Header"><stringProp name="Header.name">Authorization</stringProp><stringProp name="Header.value">Bearer ${__P(token)}</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">Content-Type</stringProp><stringProp name="Header.value">application/json</stringProp></elementProp><elementProp name="" elementType="Header"><stringProp name="Header.name">X-Correlation-ID</stringProp><stringProp name="Header.value">jmeter-${__UUID()}</stringProp></elementProp></collectionProp></HeaderManager><hashTree /><ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="tank deleted" enabled="true"><collectionProp name="Asserion.test_strings"><stringProp name="0">204</stringProp></collectionProp><stringProp name="Assertion.custom_message">ST-99 was not deleted: remove it and its temperature logs by hand (see docs/performance-testing.md)</stringProp><stringProp name="Assertion.test_field">Assertion.response_code</stringProp><boolProp name="Assertion.assume_success">false</boolProp><intProp name="Assertion.test_type">8</intProp></ResponseAssertion><hashTree /></hashTree>
+</hashTree>
+</hashTree>
+</hashTree>
+</jmeterTestPlan>

@@ -53,6 +53,8 @@ a GitHub runner can reach `mcc-db`. It cannot, and should not have to.
 The SDK is pinned by [`global.json`](../global.json) so the runner and a developer machine compile
 against the same compiler.
 
+The suite includes the unit tests in tests/ProcessingService.Tests/Unit (xUnit parameterized tests with NSubstitute stubs/mocks and a fake clock). The Test step collects line coverage with coverage.runsettings, shows a coverage table in the run summary, and uploads the Cobertura file and an HTML report as the test-results artifact for SonarCloud/Stryker.
+
 ### `deploy-staging`
 
 Runs on a push to `develop`, or a manual dispatch targeting staging. No approval. It deploys the
@@ -172,3 +174,4 @@ deployment. Rolling the pipeline green over an empty database would be the bug, 
 - [ ] Build status appears on a pull request
 - [ ] A rollback dispatch deploys an earlier commit successfully
 - [ ] Production deployment waits for approval
+- [ ] Coverage summary and the test-results artifact appear on the run

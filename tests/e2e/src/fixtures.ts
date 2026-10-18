@@ -215,3 +215,15 @@ function morningArrival(): string {
 
   return arrival.toISOString().slice(0, 19);
 }
+
+// Opens a screen of the deployed frontend. The Vercel deployment answers 404 to any path but "/"
+// (no single-page-app fallback; see docs/e2e-testing.md, findings), so the app is loaded at "/"
+// and then moved to the path the way its own router moves: pushState plus a popstate event.
+export async function openInApp(page: Page, path: string): Promise<void> {
+  await page.goto("/");
+  await page.waitForFunction(() => document.querySelector("#root")?.childElementCount);
+  await page.evaluate((to) => {
+    window.history.pushState({}, "", to);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+}

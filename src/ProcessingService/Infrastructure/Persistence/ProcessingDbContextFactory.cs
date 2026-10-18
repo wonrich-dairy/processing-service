@@ -5,13 +5,14 @@ namespace ProcessingService.Infrastructure.Persistence;
 
 /// <summary>
 /// Design-time factory for EF migrations (SCRUM-71: migrations configured independently)
-/// Uses Pomelo MySQL provider with placeholder connection string for scaffolding, real connection from env var at runtime.
-/// No secrets in source - only placeholder.
+/// the real connection string comes from the ConnectionStrings__DefaultConnection env var.
+/// if it is not set, a fake local one is used. ef only needs it to know the provider when it builds migrations or the migration script, it does not connect to anything.
+/// so there is no user or password here on purpose (sonarqube rule S6703, secrets in code).
 /// </summary>
 public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<ProcessingDbContext>
 {
     private const string DesignTimeConnectionString =
-        "Server=mcc-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=mccadmin;Password=mccAdmin@123;SslMode=Required";
+         "Server=localhost;Port=3306;Database=processingdb";
 
     public ProcessingDbContext CreateDbContext(string[] args)
     {

@@ -16,6 +16,7 @@ src/ProcessingService/appsettings.Development.json
 src/ProcessingService/appsettings.Production.json
 **/secrets.json
 .env
+secrets.env
 
 # IDE
 .vs/
@@ -43,3 +44,5 @@ logs/
 TestResults/
 coverage-report/
 results/
+# temp folder the sonarqube scanner makes during a scan
+.sonarqube/

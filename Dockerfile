@@ -1,4 +1,4 @@
-# SCRUM-56 + SCRUM-74 - Dockerfile builds and runs from clean checkout
+# SCRUM-56 + SCRUM-74
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 8080
@@ -21,4 +21,6 @@ RUN dotnet publish "ProcessingService.csproj" -c $BUILD_CONFIGURATION -o /app/pu
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+# run as the normal app user that the dotnet image already has, not root (sonarqube fix)
+USER app
 ENTRYPOINT ["dotnet", "ProcessingService.dll"]

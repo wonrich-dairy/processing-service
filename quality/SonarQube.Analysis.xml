@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!--
+  sonarqube settings for the processing service scan
+  the scanner reads this file with  /s:"<full path to this file>"  in the begin step
+
+  what this file decides:
+  1. where the sonarqube server is
+  2. the analysis scope, so only the processing service code is judged
+  3. where the test coverage file is, so coverage is not 0%
+-->
+<SonarQubeAnalysisProperties xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns="http://www.sonarsource.com/msbuild/integration/2015/1">
+
+  <!-- the local sonarqube from quality/docker-compose.sonarqube.yml. in ci this is replaced -->
+  <Property Name="sonar.host.url">http://localhost:9000</Property>
+
+  <!--
+    files that are not judged at all
+    QA Tests  = the group's selenium and postman tests and their generated reports, not service code
+    infra     = monitoring configs (prometheus, grafana), not service code
+    Migrations = ef core generated code, nobody writes it by hand
+    bin, obj, TestResults, coverage-report = build and test output
+    quality   = this folder, the quality setup itself
+  -->
+  <Property Name="sonar.exclusions">**/QA Tests/**,**/infra/**,**/Migrations/**,**/bin/**,**/obj/**,**/TestResults/**,**/coverage-report/**,**/quality/**</Property>
+
+  <!--
+    the coverage file made by coverlet when the tests run (opencover format, sonarqube reads this one for c#)
+    if this file is missing, the scan still works but coverage shows 0%
+  -->
+  <Property Name="sonar.cs.opencover.reportsPaths">**/TestResults/**/coverage.opencover.xml</Property>
+
+  <!-- the test results file, so sonarqube also shows how many tests ran and passed -->
+  <Property Name="sonar.cs.vstest.reportsPaths">**/TestResults/*.trx</Property>
+
+</SonarQubeAnalysisProperties>

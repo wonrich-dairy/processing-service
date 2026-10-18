@@ -12,7 +12,7 @@ namespace ProcessingService.Infrastructure.Persistence;
 public sealed class ProcessingDbContextFactory : IDesignTimeDbContextFactory<ProcessingDbContext>
 {
     private const string DesignTimeConnectionString =
-        "Server=demo-db.mysql.database.azure.com;Port=3306;Database=processingdb;User Id=demo_user;Password=Wr9kLp2Qz7Tx";
+         "Server=localhost;Port=3306;Database=processingdb";
 
     public ProcessingDbContext CreateDbContext(string[] args)
     {

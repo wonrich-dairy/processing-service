@@ -1,0 +1,71 @@
+name: End-to-end tests (Playwright)
+
+# UI and end-to-end tests for the Processing Service on staging (SE3112 UI / E2E testing).
+#
+# Runs two ways:
+#   - after every staging deployment, as the `e2e` job in ci-cd.yml, beside the load test. It
+#     runs after the deployment, so a failure fails the run but never blocks or undoes it;
+#   - by hand: Actions -> End-to-end tests (Playwright) -> Run workflow, choosing which project.
+#
+# What the suites cover and how to read the report: docs/e2e-testing.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Which tests: all, api (the services' APIs) or ui (the deployed frontend in Chrome)"
+        type: choice
+        options: [all, api, ui]
+        default: all
+  workflow_call:
+    inputs:
+      project: { type: string, default: "all" }
+
+permissions:
+  contents: read
+
+jobs:
+  playwright:
+    name: Playwright against staging
+    runs-on: ubuntu-latest
+    environment: staging          # E2E_PASSWORD secret (optional: the seeded accounts' password)
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: tests/e2e
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: tests/e2e/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      # The runner image already has Google Chrome, which the ui project drives (channel: chrome).
+      - name: Run (${{ inputs.project }})
+        env:
+          E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          [[ "$PROJECT" =~ ^(all|api|ui)$ ]] || { echo "::error::project must be all, api or ui, got '$PROJECT'"; exit 1; }
+          if [ "$PROJECT" = all ]; then npx playwright test; else npx playwright test --project="$PROJECT"; fi
+
+      # Results per spec and the known defects, on the run's summary page.
+      - name: Summary
+        if: ${{ !cancelled() }}
+        run: node scripts/summary.mjs
+
+      # The HTML report, and a trace, screenshot and video for every failed test.
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            tests/e2e/reports
+            tests/e2e/test-results
+          if-no-files-found: ignore

@@ -22,6 +22,7 @@ export default defineConfig({
     ["list"],
     ["html", { outputFolder: "reports/html", open: "never" }],
     ["junit", { outputFile: "reports/junit.xml" }],
+    ["json", { outputFile: "reports/results.json" }],
   ],
 
   use: {

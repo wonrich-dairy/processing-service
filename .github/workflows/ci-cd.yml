@@ -83,7 +83,7 @@ jobs:
       # The suite boots the app through WebApplicationFactory. It needs no database: the health
       # check reports the connection as unhealthy and the test accepts that, so CI stays
       # independent of mcc-db being reachable from a GitHub runner.
-      # SE3112: this step runs the whole suite, including the unit tests in tests/ProcessingService.Tests/Unit
+      # this step runs the whole suite, including the unit tests in tests/ProcessingService.Tests/Unit
       # (parameterized xUnit tests with NSubstitute doubles). It also collects line coverage as Cobertura
       # (coverage.runsettings) and writes a .trx result file. A failing test fails the job, so nothing deploys.
       - name: Test (unit + API tests, with coverage)
@@ -151,10 +151,111 @@ jobs:
           name: migrations
           path: ${{ github.workspace }}/migrations/migrations.sql
 
+  # code quality and metrics, sonarqube static analysis with our own quality gate
+  # runs on every pr and push. sonarqube runs inside this job as a container, fresh every run,
+  # so there is no cloud account and nothing to pay. if the gate fails, this job fails and
+  # nothing deploys. see quality/README.md
+  code-quality:
+    name: Code quality (SonarQube)
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    services:
+      sonarqube:
+        image: sonarqube:26.9.0.129388-community
+        ports:
+          - 9000:9000
+        env:
+          SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.commit_sha || github.ref }}
+          # full history, so sonarqube can read git blame (who changed each line)
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # sonarqube needs about 1 to 2 minutes to start
+      - name: Wait for SonarQube
+        run: |
+          for _ in $(seq 1 60); do
+            curl -fs http://localhost:9000/api/system/status | grep -q '"status":"UP"' && { echo "sonarqube is up"; exit 0; }
+            sleep 5
+          done
+          echo "::error::sonarqube did not start"
+          exit 1
+
+      # fresh server, so the login is the default admin / admin. this server only lives for this job
+      - name: Create project and token
+        run: |
+          curl -fs -u admin:admin -X POST "http://localhost:9000/api/projects/create?project=wonrich-processing-service&name=Processing%20Service" > /dev/null
+          token=$(curl -fs -u admin:admin -X POST "http://localhost:9000/api/user_tokens/generate?name=ci" | jq -r .token)
+          echo "::add-mask::$token"
+          echo "SONAR_TOKEN=$token" >> "$GITHUB_ENV"
+
+      # our own gate. the default one only checks new code, and a fresh server never has new code
+      - name: Create the quality gate
+        shell: pwsh
+        run: ./quality/setup-quality-gate.ps1 -Token $env:SONAR_TOKEN
+
+      # same 4 steps as on my pc: begin, build, test with coverage, end
+      # sonar.qualitygate.wait makes the end step wait for the gate and fail the job if it fails
+      - name: Analyse (begin)
+        run: |
+          dotnet tool restore
+          dotnet sonarscanner begin /k:"wonrich-processing-service" \
+            /s:"$GITHUB_WORKSPACE/quality/SonarQube.Analysis.xml" \
+            /d:sonar.token="$SONAR_TOKEN" \
+            /d:sonar.qualitygate.wait=true
+
+      - name: Build
+        run: dotnet build ${{ env.SOLUTION }} --configuration Release --no-incremental
+
+      - name: Test with coverage
+        run: >-
+          dotnet test ${{ env.SOLUTION }} --configuration Release --no-build
+          --settings coverage.runsettings --collect:"XPlat Code Coverage"
+          --results-directory TestResults --logger "trx;LogFileName=test-results.trx"
+
+      - name: Analyse (end) and check the quality gate
+        run: dotnet sonarscanner end /d:sonar.token="$SONAR_TOKEN"
+
+      # the results table on the run summary page, also when the gate failed
+      - name: Quality summary
+        if: ${{ !cancelled() }}
+        run: |
+          api="http://localhost:9000/api"
+          status=$(curl -fs -u "$SONAR_TOKEN:" "$api/qualitygates/project_status?projectKey=wonrich-processing-service") || exit 0
+          measures=$(curl -fs -u "$SONAR_TOKEN:" "$api/measures/component?component=wonrich-processing-service&metricKeys=software_quality_security_issues,software_quality_reliability_issues,software_quality_maintainability_issues,coverage,duplicated_lines_density,software_quality_maintainability_remediation_effort,ncloc,tests")
+          m() { echo "$measures" | jq -r --arg k "$1" '.component.measures[] | select(.metric==$k) | .value'; }
+          {
+            echo "## Code quality (SonarQube)"
+            echo ""
+            echo "**Quality gate: $(echo "$status" | jq -r .projectStatus.status)** (OK = passed, ERROR = failed)"
+            echo ""
+            echo "| Condition | Actual | Fails when | Result |"
+            echo "|---|---|---|---|"
+            echo "$status" | jq -r '.projectStatus.conditions[] | "| \(.metricKey) | \(.actualValue) | \(.comparator) \(.errorThreshold) | \(.status) |"'
+            echo ""
+            echo "| Metric | Value |"
+            echo "|---|---|"
+            echo "| Security issues | $(m software_quality_security_issues) |"
+            echo "| Reliability issues | $(m software_quality_reliability_issues) |"
+            echo "| Maintainability issues (code smells) | $(m software_quality_maintainability_issues) |"
+            echo "| Technical debt (minutes) | $(m software_quality_maintainability_remediation_effort) |"
+            echo "| Coverage | $(m coverage)% |"
+            echo "| Duplications | $(m duplicated_lines_density)% |"
+            echo "| Lines of code | $(m ncloc) |"
+            echo "| Tests | $(m tests) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ── Staging ───────────────────────────────────────────────────────────────────────────────
   # Automatic on every push to develop. No approval: staging exists to be broken in.
   deploy-staging:
-    needs: build-and-test
+    needs: [build-and-test, code-quality]
     if: |
       (github.ref == 'refs/heads/develop' && github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.target_environment == 'staging')
@@ -206,7 +307,7 @@ jobs:
   # in SCRUM-70 carries a required reviewer and a main-only branch policy. The `if` below is a
   # second line of defence, not the control itself.
   deploy-production:
-    needs: build-and-test
+    needs: [build-and-test, code-quality]
     if: |
       (github.ref == 'refs/heads/main' && github.event_name == 'push') ||
       (github.event_name == 'workflow_dispatch' &&

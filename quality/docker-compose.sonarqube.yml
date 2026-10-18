@@ -1,0 +1,41 @@
+# sonarqube for the code quality checks of processing service
+# this runs only on any dev pc, not in azure
+#
+# start:  docker compose -f quality/docker-compose.sonarqube.yml up -d
+# open:   http://localhost:9000   (first login is admin / admin, then it asks a new password)
+# stop:   docker compose -f quality/docker-compose.sonarqube.yml down
+#
+# stop does not delete anything. the projects and settings stay in the volumes below,
+# so next time it opens with the same data
+
+name: wonrich-quality
+
+services:
+  sonarqube:
+    # community edition, free. version is pinned so everyone gets the same rules and screens
+    image: sonarqube:26.9.0.129388-community
+    container_name: wonrich-sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      # sonarqube has a search engine inside (elasticsearch). on a dev pc docker desktop
+      # cant pass its strict memory checks, so we skip them. fine for local use
+      SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+    volumes:
+      # data = the analysis results and the built in database (h2, good enough for local)
+      - sonarqube_data:/opt/sonarqube/data
+      # extensions = plugins, logs = the server logs if something goes wrong
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    restart: unless-stopped
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:

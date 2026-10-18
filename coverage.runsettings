@@ -5,7 +5,8 @@
       <DataCollector friendlyName="XPlat code coverage">
         <Configuration>
           <!-- Cobertura so SonarCloud and the group pipeline can read it -->
-          <Format>cobertura</Format>
+          <!-- opencover too, because sonarqube reads opencover for c# coverage -->
+          <Format>cobertura,opencover</Format>
           <!-- EF migrations are generated code that never runs under test -->
           <Exclude>[ProcessingService]ProcessingService.Infrastructure.Persistence.Migrations.*</Exclude>
           <ExcludeByFile>**/Infrastructure/Persistence/Migrations/**/*.cs</ExcludeByFile>

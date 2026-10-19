@@ -246,7 +246,7 @@
       ]
     },
     {
-      "name": "07 - Try alternative login as lab - POST http://localhost:5189/api/auth/login lab/Wonrich@2026 - check if lab user exists",
+      "name": "07 - Try alternative login as lab - POST http://localhost:5189/api/auth/login lab/{{password}} - check if lab user exists",
       "request": {
         "method": "POST",
         "header": [
@@ -254,7 +254,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userName\": \"lab\",\n  \"password\": \"Wonrich@2026\"\n}"
+          "raw": "{\n  \"userName\": \"lab\",\n  \"password\": \"{{password}}\"\n}"
         },
         "url": {
           "raw": "{{authBaseUrl}}/api/auth/login",

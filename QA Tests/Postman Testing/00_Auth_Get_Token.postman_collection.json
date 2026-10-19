@@ -1,12 +1,12 @@
 {
   "info": {
     "name": "00 - Auth - Get JWT Token - RUN THIS FIRST - FINAL 5189+5210",
-    "description": "Based on your logs:\n- Auth service runs on http://localhost:5189 (not 5000) - see log: Now listening on http://localhost:5189\n- Processing service runs on http://localhost:5210 - see log: Now listening on http://localhost:5210\n- Your 401 errors: GET TanksController.List 401 0ms = missing Bearer token\n- Your 404 errors: GET /api/Tanks/ST-01 404 = wrong endpoint (PascalCase + code not GUID)\n\nCORRECT FLOW:\n1. Run 01 LOCALHOST 5189 login -> token auto-saved to {{accessToken}}\n2. If 5189 not running, run 02 STAGING login fallback\n3. Run 03 Test token GET /api/Ping with token -> 200 OK\n4. Run 04 Health anonymous GET /health -> 200 Healthy (no token needed)\n5. Then run other SCRUM collections -> will be 200 OK not 401\n\nCredentials from auth log: userName=processing exists in users table, password=Wonrich@2026 -> INSERT INTO refresh_tokens success",
+    "description": "Based on your logs:\n- Auth service runs on http://localhost:5189 (not 5000) - see log: Now listening on http://localhost:5189\n- Processing service runs on http://localhost:5210 - see log: Now listening on http://localhost:5210\n- Your 401 errors: GET TanksController.List 401 0ms = missing Bearer token\n- Your 404 errors: GET /api/Tanks/ST-01 404 = wrong endpoint (PascalCase + code not GUID)\n\nCORRECT FLOW:\n1. Run 01 LOCALHOST 5189 login -> token auto-saved to {{accessToken}}\n2. If 5189 not running, run 02 STAGING login fallback\n3. Run 03 Test token GET /api/Ping with token -> 200 OK\n4. Run 04 Health anonymous GET /health -> 200 Healthy (no token needed)\n5. Then run other SCRUM collections -> will be 200 OK not 401\n\nCredentials from auth log: userName=processing exists in users table, password={{password}} -> INSERT INTO refresh_tokens success",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "01 - Get token LOCALHOST 5189 - POST http://localhost:5189/api/auth/login - processing/Wonrich@2026 - MAIN",
+      "name": "01 - Get token LOCALHOST 5189 - POST http://localhost:5189/api/auth/login - processing/{{password}} - MAIN",
       "request": {
         "method": "POST",
         "header": [
@@ -14,7 +14,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userName\": \"processing\",\n  \"password\": \"Wonrich@2026\"\n}"
+          "raw": "{\n  \"userName\": \"processing\",\n  \"password\": \"{{password}}\"\n}"
         },
         "url": {
           "raw": "{{authBaseUrl}}/api/auth/login",
@@ -59,7 +59,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userName\": \"processing\",\n  \"password\": \"Wonrich@2026\"\n}"
+          "raw": "{\n  \"userName\": \"processing\",\n  \"password\": \"{{password}}\"\n}"
         },
         "url": {
           "raw": "{{authBaseUrlStaging}}/api/auth/login",

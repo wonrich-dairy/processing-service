@@ -28,7 +28,7 @@ jobs:
   playwright:
     name: Playwright against staging
     runs-on: ubuntu-latest
-    environment: staging          # E2E_PASSWORD secret (optional: the seeded accounts' password)
+    environment: staging          # E2E_PASSWORD secret (required: the seeded accounts' password)
     timeout-minutes: 30
     defaults:
       run:

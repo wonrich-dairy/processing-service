@@ -4,7 +4,7 @@ Vercel URL: https://frontend-phi-sage-81.vercel.app/
 Tech: Frontend React, Backend .NET
 Covers SCRUMs 56,57,61,62,63,64,65,70,71,72,74,77,88,89,90 + 78 shared components
 
-Fill credentials in .env file or edit here directly.
+Fill credentials in the .env file (see .env.example). Never put passwords in this file.
 """
 import os
 from dotenv import load_dotenv
@@ -23,12 +23,15 @@ API_HEALTH_URL = f"{API_BASE_URL}/health"
 # For local docker-compose fallback
 API_BASE_URL_LOCAL = "http://localhost:5210"
 
-# Credentials - Provided by user for Vercel live https://frontend-phi-sage-81.vercel.app/
-# Employee ID - processing, PIN - Wonrich@2026 - validated 2026-09-16
+# Credentials - the seeded staging accounts for Vercel live https://frontend-phi-sage-81.vercel.app/
+# Employee ID - processing, validated 2026-09-16. The PIN is never kept in source: set PIN in .env
 EMPLOYEE_ID = os.getenv("EMPLOYEE_ID", "processing")
-PIN = os.getenv("PIN", "Wonrich@2026")
+PIN = os.getenv("PIN", "")
 EMPLOYEE_ID_ADMIN = os.getenv("EMPLOYEE_ID_ADMIN", "processing")
-PIN_ADMIN = os.getenv("PIN_ADMIN", "Wonrich@2026")
+PIN_ADMIN = os.getenv("PIN_ADMIN", PIN)
+
+if not PIN:
+    raise RuntimeError("PIN is not set. Copy .env.example to .env and fill in the staging password.")
 
 # Additional role accounts if available
 EMPLOYEE_ID_OPERATOR = os.getenv("EMPLOYEE_ID_OPERATOR", "")

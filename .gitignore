@@ -46,3 +46,7 @@ coverage-report/
 results/
 # temp folder the sonarqube scanner makes during a scan
 .sonarqube/
+
+# python bytecode
+__pycache__/
+*.pyc

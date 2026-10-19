@@ -59,12 +59,12 @@ defect is fixed, so the marker comes off. The run's summary lists them.
 
 ## Configuration (staging environment)
 
-Everything has a working default (the staging hosts, in `tests/e2e/src/config.ts`), so nothing is
-required. To override:
+`E2E_PASSWORD` is required: the password is not kept in source. Everything else has a working
+default (the staging hosts, in `tests/e2e/src/config.ts`). To override:
 
 | Name | Kind | Purpose |
 | --- | --- | --- |
-| `E2E_PASSWORD` | secret | Password of the seeded staging accounts, if not the documented one |
+| `E2E_PASSWORD` | secret | **Required.** Password of the seeded staging accounts. Locally, put it in `tests/e2e/.env` |
 | `E2E_WEB_URL`, `E2E_AUTH_URL`, `E2E_INTAKE_URL`, `E2E_PROCESSING_URL`, `E2E_QUALITY_LAB_URL`, `E2E_TRACEABILITY_URL` | env | Point the suite at other hosts (`tests/e2e/.env.example`) |
 
 The accounts used are the seeded ones: `factory` unloads, `analyst` runs QC and the lab panel,

@@ -16,12 +16,14 @@
   <!--
     files that are not judged at all
     QA Tests  = the group's selenium and postman tests and their generated reports, not service code
+    tests/e2e = the playwright end-to-end suite (typescript), not service code. without this its
+                helpers count as uncovered source lines and its test logins as security issues
     infra     = monitoring configs (prometheus, grafana), not service code
     Migrations = ef core generated code, nobody writes it by hand
     bin, obj, TestResults, coverage-report = build and test output
     quality   = this folder, the quality setup itself
   -->
-  <Property Name="sonar.exclusions">**/QA Tests/**,**/infra/**,**/Migrations/**,**/bin/**,**/obj/**,**/TestResults/**,**/coverage-report/**,**/quality/**</Property>
+  <Property Name="sonar.exclusions">**/QA Tests/**,**/tests/e2e/**,**/infra/**,**/Migrations/**,**/bin/**,**/obj/**,**/TestResults/**,**/coverage-report/**,**/quality/**</Property>
 
   <!--
     the coverage file made by coverlet when the tests run (opencover format, sonarqube reads this one for c#)

@@ -15,7 +15,12 @@ export const urls = {
 
 export type Service = Exclude<keyof typeof urls, "web">;
 
-export const password = process.env.E2E_PASSWORD || "Wonrich@2026";
+// The seeded accounts' password: the E2E_PASSWORD secret in CI, tests/e2e/.env locally. Never in source.
+export const password = process.env.E2E_PASSWORD || "";
+
+if (!password) {
+  throw new Error("E2E_PASSWORD is not set. Copy tests/e2e/.env.example to .env and fill it in.");
+}
 
 // The seeded accounts, one per role, and what each does in this suite.
 export const accounts = {

@@ -1,11 +1,11 @@
 # Live Validation Report - Vercel + Azure Staging
 **Date:** 2026-09-16
 **Vercel URL:** https://frontend-phi-sage-81.vercel.app/
-**Credentials:** Employee ID `processing` / PIN `Wonrich@2026` - VALIDATED
+**Credentials:** Employee ID `processing` / PIN `<staging password>` - VALIDATED
 
 ## Auth Service
 **URL:** https://wonrich-auth-app-f4dndrgcgzgjb5h4.malaysiawest-01.azurewebsites.net
-- POST /api/auth/login with {userName:"processing", password:"Wonrich@2026"} -> 200 OK
+- POST /api/auth/login with {userName:"processing", password:"<staging password>"} -> 200 OK
 - Returns accessToken (708 chars), refreshToken, userName, displayName:"Processing Technician", role:"ProcessingTechnician", facility:"Factory-Wonrich"
 - JWT decoded: sub 4d93c93c-a7cc-4d79-bdad-fd027fcc17b6, role ProcessingTechnician, aud wonrich-services, iss wonrich-auth
 
@@ -158,7 +158,7 @@ GET /api/quality-tests/pending -> 5 pending with Passed Accept ReleasedForAlloca
 - Sync queue wonrich.sync.queue localStorage for offline
 
 ## Selenium Tests Validation
-- Login with processing/Wonrich@2026 -> 200 OK token -> role ProcessingTechnician -> should navigate to /processing Factory Active
+- Login with processing/<staging password> -> 200 OK token -> role ProcessingTechnician -> should navigate to /processing Factory Active
 - ProcessingTechnician has readProcessing, manageProcessingTanks, recordUnloads per permissions
 - Tests in Selenium_Tests/ cover all above ACs via UI - login, dashboard, runs list, detail quality allocations stages, tanks seed code normalization, badges distinct, 360px NFR5, complete run, security health anonymous auth 401
 

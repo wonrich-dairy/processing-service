@@ -45,6 +45,11 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Chrome comes from the runner image, but video recording on failure (playwright.config.ts)
+      # needs Playwright's own ffmpeg, which is not on the image.
+      - name: Install ffmpeg for Playwright video
+        run: npx playwright install ffmpeg
+
       # The runner image already has Google Chrome, which the ui project drives (channel: chrome).
       - name: Run (${{ inputs.project }})
         env:
